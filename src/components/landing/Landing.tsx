@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { loadEarlyAccess, saveEarlyAccess } from '../../earlyAccess';
 import './landing.css';
 
 /** Per-item reveal stagger — sets the `--rd` delay CSS var used by `.lp-reveal`. */
@@ -120,10 +121,14 @@ function Section({ id, eyebrow, title, children }: { id: string; eyebrow: string
 }
 
 type WaitState = 'idle' | 'submitting' | 'success' | 'duplicate' | 'error';
+type RedeemState = 'idle' | 'submitting' | 'success' | 'error';
 
 export default function Landing({ onEnter }: Props) {
   const [wait, setWait] = useState<WaitState>('idle');
   const [waitlistNotice, setWaitlistNotice] = useState<string | null>(null);
+  // Phase 8 — invite-code redemption (early access). Local-only success flag; never gates the game.
+  const [redeem, setRedeem] = useState<RedeemState>(() => (loadEarlyAccess() ? 'success' : 'idle'));
+  const [redeemNotice, setRedeemNotice] = useState<string | null>(() => (loadEarlyAccess() ? 'EARLY ACCESS UNLOCKED' : null));
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Real submission → POST /api/waitlist (server stores it). We ONLY show success after the API
@@ -167,6 +172,45 @@ export default function Landing({ onEnter }: Props) {
       setWaitlistNotice('Could not submit. Please try again.');
     }
   }, [wait]);
+
+  // Redeem an invite code → POST /api/invite/redeem. On success we store a LOCAL-ONLY early-access
+  // flag (earlyAccess.ts) — it never touches the game save, the profile, or progression, and the
+  // alpha stays open to everyone. Failure shows the spec's "INVALID OR USED CODE" message.
+  const onRedeemSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (redeem === 'submitting' || redeem === 'success') return;
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const inviteCode = String(fd.get('inviteCode') ?? '').trim().toUpperCase();
+    const callsign = String(fd.get('callsign') ?? '').trim();
+    if (!inviteCode) {
+      setRedeem('error');
+      setRedeemNotice('INVALID OR USED CODE');
+      return;
+    }
+    setRedeem('submitting');
+    setRedeemNotice(null);
+    try {
+      const res = await fetch('/api/invite/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCode, callsign: callsign || undefined }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; accessStatus?: string };
+      if (res.ok && data.ok) {
+        saveEarlyAccess({ earlyAccess: true, code: inviteCode, callsign: callsign || null, redeemedAt: new Date().toISOString() });
+        setRedeem('success');
+        setRedeemNotice('EARLY ACCESS UNLOCKED');
+        form.reset();
+      } else {
+        setRedeem('error');
+        setRedeemNotice('INVALID OR USED CODE');
+      }
+    } catch {
+      setRedeem('error');
+      setRedeemNotice('Could not reach the network. Please try again.');
+    }
+  }, [redeem]);
 
   // Panel reveal — each `.lp-reveal` panel fades/slides in WITH its text as it scrolls into view
   // (replays on every reload since the component remounts). Above-the-fold panels trip immediately.
@@ -389,6 +433,37 @@ export default function Landing({ onEnter }: Props) {
           )}
           <p className="lp-form__fine">We only use your email for NEVA Network alpha updates. No token sale is active.</p>
         </form>
+
+        {/* ---- invite code redemption (early access) ---- */}
+        <div className="lp-ea lp-reveal" style={rd(2)}>
+          <h3 className="lp-h3">Have an invite code?</h3>
+          <p className="lp-ea__lead">
+            Redeem an early-access code to flag this device with the EARLY ACCESS badge. The alpha is
+            open to everyone — this just prepares your client for the accounts phase. No login or
+            payment, and your code can be redeemed once.
+          </p>
+          {redeem === 'success' ? (
+            <div className="lp-ea__ok" role="status">
+              <span className="lp-chip lp-chip--done">EARLY ACCESS UNLOCKED</span>
+              <span className="lp-ea__ok-note">Stored locally on this device.</span>
+            </div>
+          ) : (
+            <form className="lp-form lp-ea__form" onSubmit={onRedeemSubmit}>
+              <div className="lp-form__row">
+                <input className="lp-input" type="text" name="inviteCode" placeholder="NEVA-XXXX-XXXX" aria-label="Invite code" maxLength={20} required disabled={redeem === 'submitting'} />
+                <input className="lp-input" type="text" name="callsign" placeholder="Callsign (optional)" aria-label="Callsign (optional)" maxLength={80} disabled={redeem === 'submitting'} />
+              </div>
+              <div className="lp-form__ctas">
+                <button className="lp-btn lp-btn--primary" type="submit" disabled={redeem === 'submitting'}>
+                  {redeem === 'submitting' ? 'Redeeming…' : 'REDEEM ACCESS'}
+                </button>
+              </div>
+              {redeemNotice && (
+                <p className={`lp-form__notice lp-form__notice--${redeem}`} role="status">{redeemNotice}</p>
+              )}
+            </form>
+          )}
+        </div>
       </Section>
 
       {/* ---- footer ---- */}

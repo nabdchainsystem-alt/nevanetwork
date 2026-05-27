@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node --env-file-if-exists=.env server/index.mjs",
-    "waitlist:count": "node scripts/waitlist-summary.mjs"
+    "waitlist:count": "node scripts/waitlist-summary.mjs",
+    "feedback:summary": "node scripts/feedback-summary.mjs",
+    "analytics:summary": "node scripts/analytics-summary.mjs",
+    "backend:check": "node --env-file-if-exists=.env scripts/backend-check.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

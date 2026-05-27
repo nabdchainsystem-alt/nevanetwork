@@ -241,11 +241,24 @@ Modules/upgrades give subtle in-action feedback ("TRACE SHIELD", "SIGNAL RELAY A
 
 ## 8. Backend / Landing / Waitlist
 
+> **Phase 8 update (2026-05-27):** the backend gained an early-access layer — invite codes
+> (generate/assign/redeem/status), feedback capture, privacy-safe analytics, and a secret-gated
+> admin summary — all still zero-dependency Node + JSON files. See **`server/README.md`** and
+> blueprint **§31**. Still no accounts/login/sessions/DB/email/payments.
+
 - **Server:** `server/index.mjs` — zero-dependency Node `http` server (default port **8787**).
   - `POST /api/waitlist` → `{ ok, message, entryId }` | `{ ok, duplicate, message }` |
     `{ ok:false, error }`.
   - `GET /api/waitlist/stats` → `{ total, byRole, latestCreatedAt }` (**no emails exposed**).
+  - **Phase 8:** `POST /api/invite/generate` (admin) · `POST /api/invite/redeem` ·
+    `GET /api/invite/status` · `POST /api/feedback` · `POST /api/analytics/event` ·
+    `GET /api/admin/summary` (admin, aggregate-only, 503 if `NEVA_ADMIN_SECRET` unset).
   - Serves built `dist/` in production (SPA fallback).
+- **Phase 8 stores:** invite-code helpers in `waitlist-store.mjs` (`NEVA-XXXX-XXXX`, one code ↔ one
+  entry, redeem-once); `feedback-store.mjs` → `data/feedback.json`; `analytics-store.mjs` →
+  `data/analytics.json` (allow-listed events, emails stripped); shared `json-store.mjs`. Landing
+  has an invite-redeem block storing a **local-only** early-access flag (`earlyAccess.ts`) that does
+  **not** gate the game. Scripts: `pnpm feedback:summary` · `pnpm analytics:summary` · `pnpm backend:check`.
 - **Store:** `server/waitlist-store.mjs` — validation (email regex + 254 cap, role allowlist,
   trim/length caps, lowercase normalize, duplicate prevention), fs JSON at **`data/waitlist.json`**,
   corrupt-file backup, near-atomic writes. Entry model: `id, email, callsign, role, source, status
@@ -258,10 +271,12 @@ Modules/upgrades give subtle in-action feedback ("TRACE SHIELD", "SIGNAL RELAY A
   **only** after API confirms; privacy line + footer disclaimer present.
 - **Run locally:** dev = `pnpm server` + `pnpm dev`; preview = `pnpm server` + `pnpm preview`;
   prod = `pnpm build` then `pnpm server` (one process serves site + API).
-- **Complete:** collection, dedupe, validation, stats, summary script, early-access data shape.
-- **Missing:** accounts / login, invite-code issuance/redemption, email sending/verification,
-  auth on the stats endpoint, a real database. **Static hosting alone will not store submissions —
-  the Node server must run.** `data/waitlist.json` and backups are git-ignored (never commit emails).
+- **Complete:** collection, dedupe, validation, stats, summary script, early-access data shape,
+  **+ Phase 8: invite codes / redemption / early-access flag, feedback + analytics capture, protected
+  admin summary.**
+- **Missing:** real accounts / login / sessions / passwords, email sending/verification, remote save,
+  a real database, broader endpoint auth. **Static hosting alone will not store submissions — the Node
+  server must run.** `data/*.json` + backups are git-ignored (never commit emails/user data).
 
 ---
 

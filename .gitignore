@@ -16,10 +16,13 @@ dist-ssr
 test-results
 playwright-report
 
-# Waitlist data (Phase 7) — never commit collected user emails
+# Backend data (Phase 7 waitlist + Phase 8 invites/feedback/analytics) — never commit user data
 data/waitlist.json
-data/waitlist.json.tmp
+data/feedback.json
+data/analytics.json
 data/*.backup.json
+data/*.bak
+data/*.json.tmp
 
 # Server-side secrets (OpenAI key, etc.) — never commit. `.env.example` is the safe template.
 .env

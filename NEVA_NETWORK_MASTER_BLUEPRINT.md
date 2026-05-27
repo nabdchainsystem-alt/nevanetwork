@@ -65,7 +65,9 @@ upgrade objectives.*
   **Mission Objective Guidance** (marker/badge/hint/FOCUS OBJECTIVE/grid tips) ·
   **Cinematic transitions** (route-shift warp, core sweep) ·
   **Sector visual identity** (A01 vs A02 fog/bloom).
-- **Landing page** (`Landing.tsx` + `landing.css`, pure-CSS) · **Waitlist backend** (`server/`).
+- **Landing page** (`Landing.tsx` + `landing.css`, pure-CSS) · **Backend foundation** (`server/`,
+  zero-dep Node): waitlist + **invite codes / redemption / early access · feedback · analytics ·
+  protected admin summary** (Phase 8 — see §31). No accounts/login/DB/payments.
 - **NEVA Core Assistant v1 (AI)** — advisory tactical-hint helper; backend-only OpenAI (see §28).
 - **Player Profile v1 (Phase 7)** — LOCAL-FIRST operator identity: callsign, player level, network
   score, mission/depth high-water marks, resources + private-grid snapshot, achievements v1. Own
@@ -81,13 +83,16 @@ upgrade objectives.*
   OpenAI key is server-side only (never exposed to the frontend).
 - **Player Profile is advisory/identity only:** it lives outside `GameState`/the reducer/the save and
   never dispatches a game action or changes missions/resources/trace/rewards/completion.
-- **Invite-code fields exist in the waitlist data model (`status`/`invited`/`inviteCode`), but the
-  invite-code flow is not implemented.** A LOZA easter-egg hook is a dormant placeholder only.
+- **Invite codes + early access are implemented (Phase 8 — see §31):** generate/assign/redeem +
+  feedback/analytics/admin-summary endpoints exist (backend-only, no emails exposed). What is still
+  **not** built: real accounts, login/sessions, passwords, email sending, remote save, a database.
+  A LOZA easter-egg hook is a dormant placeholder only.
 
 ### Status labels
 Prototype Foundation **Complete** · Gameplay Expansion to M20 **Complete** · Cinematic Pass
-**Complete** · Landing Page **Complete** · Waitlist Backend **Partial Complete** · Accounts/Invite
-Codes **Not Started** · AI Integration **v1 — NEVA Core Assistant (advisory, backend-only; see §28)** ·
+**Complete** · Landing Page **Complete** · Backend Foundation **Phase 8 — Partial Complete (waitlist
++ invite codes / early access / feedback / analytics / admin summary; see §31)** · Accounts / Login /
+Remote Save **Not Started** · AI Integration **v1 — NEVA Core Assistant (advisory, backend-only; see §28)** ·
 Player Profile **v1 — Local operator identity (Phase 7, local-only; see §30)** ·
 Token Utility **Not Started / Blocked** · Sharia Review **Not Started / Required Later** ·
 Legal Review **Not Started / Required Later** · Presale **Blocked**.
@@ -1534,3 +1539,61 @@ presale / wallet stay blocked behind the roadmap + legal + Sharia gates.
 achievements) · `src/components/ProfilePanel.tsx` · `src/components/CallsignPrompt.tsx` ·
 `src/components/profile.css` (`.pf*` / `.cs*` / `.pf-launch`) · wired in `src/GameApp.tsx`
 (profile state, sync effect, L toggle, panel/prompt mount, RESET PROFILE handler).
+
+---
+
+## 31. Phase 8 — Backend Foundation (early access; no accounts/payments)
+
+A safe **early-access backend layer** on top of the existing Phase-7 waitlist. Still the
+**zero-dependency Node** server (stdlib only, `pnpm server`), still JSON files under `data/`.
+**No accounts, login, sessions, passwords, email sending, database, or Web3/wallet/token/presale/
+payment** — those are explicitly out of scope (the "what's missing" list below is the seam). Full
+run/endpoint reference lives in **`server/README.md`**.
+
+### Invite code system (`server/waitlist-store.mjs`)
+Invite codes extend the existing waitlist entry (its `status`/`invited`/`inviteCode` fields). Helpers:
+`generateInviteCode()`, `assignInviteCodeToEntry({email|entryId})` (idempotent, marks `invited`),
+`getInviteByCode(code)` (email-free status), `redeemInviteCode(code, {callsign, profileId})`
+(redeem **once**), `listInviteStats()` (aggregate). Codes are readable **`NEVA-XXXX-XXXX`** from an
+unambiguous charset (no `I L O U 0 1`), unique, stored in `waitlist.json`, one code ↔ one entry.
+Redemption records `redeemed` / `redeemedAt` / `redeemedByCallsign` / `accessStatus:"early_access"`.
+
+### Endpoints (`server/index.mjs`)
+- `POST /api/invite/generate` — **admin-gated**; `{email|entryId}` → `{ ok, entryId, inviteCode }`.
+- `POST /api/invite/redeem` — `{ inviteCode, callsign? }` → `{ ok, accessStatus, message,
+  profileAccess:{earlyAccess:true} }`; reused code → `409 ALREADY_REDEEMED`, bad code → `INVALID`.
+- `GET  /api/invite/status?code=…` — `{ ok, valid, redeemed, accessStatus }` (no private data).
+- `POST /api/feedback` — category allow-list (`bug/balance/ui/mission/performance/idea/other`),
+  capped message + optional `callsign`/`missionId`/`trace`/`depth`/`source` → `{ ok, feedbackId }`
+  (`server/feedback-store.mjs` → `data/feedback.json`).
+- `POST /api/analytics/event` — allow-listed `eventName` (`game_started`, `mission_started`,
+  `mission_completed`, `trace_locked`, `invite_redeemed`, `profile_created`,
+  `landing_waitlist_joined`, `ai_hint_used`), sanitized + capped `metadata` (**emails stripped**) →
+  `{ ok }` (`server/analytics-store.mjs` → `data/analytics.json`).
+- `GET  /api/admin/summary` — **admin-gated**; aggregate counts only (waitlist total + byRole,
+  invites withCode/invited/redeemed, feedback total + byCategory, analytics total + byEventName,
+  latest timestamps). **Never returns emails or raw entries.** Secret unset → `503` setup message.
+
+### Admin secret + guards
+`NEVA_ADMIN_SECRET` (server-side only, never `VITE_`). When **unset**: admin summary → `503`;
+invite-generate allowed **only from localhost** (dev convenience). When set: required via
+`x-neva-admin-secret` header / `?secret=` / body `adminSecret`, compared in constant time. Per-IP
+rate limits per channel + 8 KB body cap (16 KB feedback). Data files git-ignored
+(`data/waitlist.json` · `data/feedback.json` · `data/analytics.json` + `*.backup.json` / `*.bak` /
+`*.json.tmp`). Shared file-store helper: `server/json-store.mjs`.
+
+### Frontend (early access — landing only, local-only)
+The landing `#waitlist` section gains an **invite-code redemption** block: code input + **REDEEM
+ACCESS** → `POST /api/invite/redeem`; success shows **EARLY ACCESS UNLOCKED** and stores a
+local-only flag (`src/earlyAccess.ts`, key `neva:earlyaccess:v1`), failure shows **INVALID OR USED
+CODE**. **It does NOT gate the game** (the alpha is open) and is deliberately **separate from the
+Player Profile** (the profile guardrail forbids invite-code linking) and from the game save.
+
+### Scripts
+`pnpm feedback:summary` · `pnpm analytics:summary` · `pnpm backend:check` (load all stores + report
+config) — alongside the existing `pnpm waitlist:count`. Aggregate-only output (no emails/messages).
+
+### Status: **Phase 8 Foundation — Partial Complete.** Built: invite codes, redemption, early-access
+gating (local), feedback capture, analytics capture, protected admin summary, safer stats.
+**Still missing (by design):** real accounts · login/sessions · passwords · email sending/
+verification · remote save · a database · auth on broader surfaces · token/presale/Web3/payments.

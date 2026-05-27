@@ -211,6 +211,101 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, result);
   }
 
+  // ===================== Phase 8 — invite codes (early-access gating) =====================
+  // Generate/assign an invite code for an existing waitlist entry. Admin-gated. Never returns email.
+  if (pathname === '/api/invite/generate' && req.method === 'POST') {
+    if (adminRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many requests. Please try again shortly.' });
+    let input;
+    try {
+      input = await readJson(req);
+    } catch {
+      return sendJson(res, 413, { ok: false, error: 'Request too large.' });
+    }
+    if (input === null) return sendJson(res, 400, { ok: false, error: 'Invalid JSON.' });
+    const auth = checkAdmin(providedSecret(req, url, input), ip, { allowLocalIfUnset: true });
+    if (!auth.ok) return sendJson(res, auth.code, { ok: false, error: auth.error });
+    if (!input.email && !input.entryId) return sendJson(res, 400, { ok: false, error: 'email or entryId is required.' });
+    const result = assignInviteCodeToEntry({ email: input.email, entryId: input.entryId });
+    return sendJson(res, result.ok ? 200 : 404, result);
+  }
+
+  // Redeem an invite code once → unlocks early access. No login/password/session is created.
+  if (pathname === '/api/invite/redeem' && req.method === 'POST') {
+    if (inviteRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many attempts. Please try again shortly.' });
+    let input;
+    try {
+      input = await readJson(req);
+    } catch {
+      return sendJson(res, 413, { ok: false, error: 'Request too large.' });
+    }
+    if (input === null) return sendJson(res, 400, { ok: false, error: 'Invalid JSON.' });
+    const result = redeemInviteCode(input.inviteCode, { callsign: input.callsign, profileId: input.profileId });
+    if (!result.ok) {
+      const code = result.error === 'ALREADY_REDEEMED' ? 409 : 400;
+      return sendJson(res, code, { ok: false, error: result.error, message: result.message });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      accessStatus: result.accessStatus,
+      message: result.message,
+      profileAccess: { earlyAccess: true },
+    });
+  }
+
+  // Check a code's validity without revealing any private data.
+  if (pathname === '/api/invite/status' && req.method === 'GET') {
+    if (inviteStatusRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many requests. Please try again shortly.' });
+    const info = getInviteByCode(url.searchParams.get('code'));
+    if (!info) return sendJson(res, 200, { ok: true, valid: false, redeemed: false, accessStatus: null });
+    return sendJson(res, 200, { ok: true, valid: true, redeemed: info.redeemed, accessStatus: info.accessStatus });
+  }
+
+  // ===================== Phase 8 — feedback =====================
+  if (pathname === '/api/feedback' && req.method === 'POST') {
+    if (feedbackRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many requests. Please try again shortly.' });
+    let input;
+    try {
+      input = await readJson(req, FEEDBACK_MAX_BODY);
+    } catch {
+      return sendJson(res, 413, { ok: false, error: 'Request too large.' });
+    }
+    if (input === null) return sendJson(res, 400, { ok: false, error: 'Invalid JSON.' });
+    const result = addFeedback(input);
+    return sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  // ===================== Phase 8 — analytics (privacy-safe; no emails) =====================
+  if (pathname === '/api/analytics/event' && req.method === 'POST') {
+    if (analyticsRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many requests. Please try again shortly.' });
+    let input;
+    try {
+      input = await readJson(req);
+    } catch {
+      return sendJson(res, 413, { ok: false, error: 'Request too large.' });
+    }
+    if (input === null) return sendJson(res, 400, { ok: false, error: 'Invalid JSON.' });
+    const result = addEvent(input);
+    return sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  // ===================== Phase 8 — admin summary (aggregate only; secret-gated) =====================
+  if (pathname === '/api/admin/summary' && req.method === 'GET') {
+    if (adminRateLimited(ip)) return sendJson(res, 429, { ok: false, error: 'Too many requests. Please try again shortly.' });
+    const auth = checkAdmin(providedSecret(req, url, null), ip, { allowLocalIfUnset: false });
+    if (!auth.ok) return sendJson(res, auth.code, { ok: false, error: auth.error });
+    const w = stats();
+    const inv = listInviteStats();
+    const fb = feedbackStats();
+    const an = analyticsStats();
+    return sendJson(res, 200, {
+      ok: true,
+      waitlist: { total: w.total, byRole: w.byRole, latestCreatedAt: w.latestCreatedAt },
+      invites: { withCode: inv.withCode, invited: inv.invited, redeemed: inv.redeemed, latestRedeemedAt: inv.latestRedeemedAt },
+      feedback: { total: fb.total, byCategory: fb.byCategory, latestCreatedAt: fb.latestCreatedAt },
+      analytics: { total: an.total, byEventName: an.byEventName, latestCreatedAt: an.latestCreatedAt },
+    });
+  }
+
   if (pathname.startsWith('/api/')) return sendJson(res, 404, { ok: false, error: 'Not found.' });
 
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(res, pathname);
@@ -219,6 +314,9 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`NEVA waitlist server → http://localhost:${PORT}`);
-  console.log('  POST /api/waitlist · GET /api/waitlist/stats');
+  console.log(`NEVA backend server → http://localhost:${PORT}`);
+  console.log('  waitlist : POST /api/waitlist · GET /api/waitlist/stats');
+  console.log('  invite   : POST /api/invite/generate · POST /api/invite/redeem · GET /api/invite/status');
+  console.log('  feedback : POST /api/feedback   analytics: POST /api/analytics/event');
+  console.log(`  admin    : GET /api/admin/summary  (${ADMIN_SECRET ? 'secret set' : 'NEVA_ADMIN_SECRET not set → 503'})`);
 });
