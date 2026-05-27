@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="coreGlow" cx="50%" cy="44%" r="55%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+      <stop offset=".28" stop-color="#ffffff" stop-opacity=".075"/>
+      <stop offset=".68" stop-color="#ffffff" stop-opacity=".015"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="edgeFade" cx="50%" cy="50%" r="72%">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset=".66" stop-color="#000000" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".86"/>
+    </radialGradient>
+    <linearGradient id="lineFade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".08"/>
+      <stop offset=".5" stop-color="#ffffff" stop-opacity=".46"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".08"/>
+    </linearGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="microGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M72 0H0V72" fill="none" stroke="#fff" stroke-opacity=".035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="3840" height="2160" fill="#000"/>
+  <rect width="3840" height="2160" fill="url(#microGrid)" opacity=".75"/>
+  <rect width="3840" height="2160" fill="url(#coreGlow)"/>
+
+  <g stroke="#fff" stroke-opacity=".18" stroke-width="1.1" fill="none">
+    <path d="M164 1054 524 820 866 1048 1260 730 1734 970 2262 646 2768 880 3426 592"/>
+    <path d="M236 1440 684 1232 1068 1436 1548 1188 2054 1328 2498 1082 3010 1220 3620 974"/>
+    <path d="M420 348 866 1048 684 1232 1042 1836"/>
+    <path d="M1260 730 1548 1188 1734 970 2094 1740"/>
+    <path d="M2262 646 2498 1082 2768 880 3188 1708"/>
+    <path d="M524 820 1548 1188 2498 1082 3426 592"/>
+    <path d="M164 1054 1068 1436 2054 1328 3010 1220"/>
+    <path d="M866 1048 1734 970 2768 880"/>
+    <path d="M684 1232 1260 730 2262 646 3010 1220"/>
+  </g>
+
+  <g stroke="url(#lineFade)" stroke-width="1.4" fill="none" opacity=".78">
+    <path d="M680 222 982 520 1302 412 1660 690 2056 420 2456 620 2940 402 3432 650"/>
+    <path d="M420 1710 902 1500 1372 1714 1906 1420 2384 1564 2890 1348 3426 1538"/>
+    <path d="M982 520 902 1500"/>
+    <path d="M1660 690 1372 1714"/>
+    <path d="M2456 620 2384 1564"/>
+    <path d="M2940 402 3426 1538"/>
+  </g>
+
+  <g fill="#fff" opacity=".8" filter="url(#softGlow)">
+    <circle cx="164" cy="1054" r="5"/>
+    <circle cx="524" cy="820" r="4"/>
+    <circle cx="866" cy="1048" r="6"/>
+    <circle cx="1260" cy="730" r="5"/>
+    <circle cx="1734" cy="970" r="7"/>
+    <circle cx="2262" cy="646" r="5"/>
+    <circle cx="2768" cy="880" r="6"/>
+    <circle cx="3426" cy="592" r="5"/>
+    <circle cx="236" cy="1440" r="4"/>
+    <circle cx="684" cy="1232" r="6"/>
+    <circle cx="1068" cy="1436" r="5"/>
+    <circle cx="1548" cy="1188" r="8"/>
+    <circle cx="2054" cy="1328" r="5"/>
+    <circle cx="2498" cy="1082" r="7"/>
+    <circle cx="3010" cy="1220" r="5"/>
+    <circle cx="3620" cy="974" r="4"/>
+  </g>
+
+  <g fill="none" stroke="#fff" stroke-width="1.4" stroke-opacity=".38">
+    <g transform="translate(460 440) scale(1.15)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+    <g transform="translate(1390 540) scale(.86)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+    <g transform="translate(2400 330) scale(1.28)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+    <g transform="translate(3000 1030) scale(.98)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+    <g transform="translate(860 1510) scale(1.05)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+    <g transform="translate(1960 1450) scale(.78)">
+      <path d="M0 78 132 0 268 78 132 156Z"/>
+      <path d="M0 78v154l132 78 136-78V78"/>
+      <path d="M132 156v154"/>
+    </g>
+  </g>
+
+  <g fill="#fff" opacity=".58">
+    <circle cx="320" cy="300" r="2"/><circle cx="460" cy="1340" r="2"/><circle cx="612" cy="610" r="1.8"/>
+    <circle cx="760" cy="1880" r="2"/><circle cx="940" cy="300" r="1.6"/><circle cx="1120" cy="1180" r="2"/>
+    <circle cx="1280" cy="1680" r="1.8"/><circle cx="1480" cy="920" r="2"/><circle cx="1660" cy="350" r="1.5"/>
+    <circle cx="1840" cy="1880" r="2"/><circle cx="2030" cy="760" r="1.8"/><circle cx="2200" cy="1220" r="2"/>
+    <circle cx="2380" cy="1960" r="1.6"/><circle cx="2560" cy="250" r="2"/><circle cx="2760" cy="1440" r="2"/>
+    <circle cx="2920" cy="690" r="1.6"/><circle cx="3120" cy="1820" r="2"/><circle cx="3300" cy="360" r="1.8"/>
+    <circle cx="3500" cy="1310" r="2"/><circle cx="3650" cy="1760" r="1.6"/>
+  </g>
+
+  <g stroke="#fff" stroke-opacity=".16" stroke-width="1">
+    <path d="M0 1720H3840"/><path d="M0 410H3840"/><path d="M640 0V2160"/><path d="M1920 0V2160"/><path d="M3200 0V2160"/>
+  </g>
+  <rect width="3840" height="2160" fill="url(#edgeFade)"/>
+</svg>

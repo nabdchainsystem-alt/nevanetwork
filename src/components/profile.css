@@ -1,0 +1,252 @@
+/* =====================================================================================
+   Player Profile (Phase 7) — local operator identity. NEVA holographic panel language:
+   translucent dark surface, thin lines, a single muted ice accent, compact mono rows.
+   No avatars, no colourful profile-card look. Identity/UI only — never touches gameplay.
+   ===================================================================================== */
+
+:root {
+  --pf-ice: rgba(150, 210, 220, 0.85);
+  --pf-ice-dim: rgba(150, 210, 220, 0.42);
+  --pf-ice-faint: rgba(150, 210, 220, 0.16);
+}
+
+/* ----------------------------------------------------- PROFILE [L] launcher --- */
+.pf-launch {
+  position: absolute;
+  right: 16px;
+  bottom: 96px; /* sits just above the NEVA CORE launcher (bottom: 58px) */
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--wg-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(214, 230, 255, 0.9);
+  background: linear-gradient(90deg, rgba(4, 10, 10, 0.62), rgba(0, 0, 0, 0.28) 78%, rgba(0, 0, 0, 0.08));
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-left: 1px solid var(--pf-ice-dim);
+  border-radius: 2px;
+  padding: 7px 11px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: color 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.pf-launch:hover { color: #fff; border-color: var(--pf-ice); box-shadow: 0 0 16px rgba(120, 200, 210, 0.2); }
+.pf-launch kbd {
+  font: inherit;
+  font-size: 8px;
+  padding: 1px 4px;
+  border: 1px solid var(--pf-ice-dim);
+  color: rgba(190, 220, 226, 0.85);
+}
+.is-touch .pf-launch { bottom: 122px; }
+
+/* ----------------------------------------------------- shared modal backdrop --- */
+.pf-backdrop,
+.cs-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: pf-fade-in 0.2s ease both;
+}
+.pf-backdrop.is-closing { animation: pf-fade-out 0.18s ease both; }
+@keyframes pf-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pf-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* ============================== PLAYER PROFILE PANEL ============================== */
+.pf {
+  position: relative;
+  width: min(560px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 22px 24px 18px;
+  font-family: var(--wg-mono);
+  color: rgba(220, 230, 236, 0.92);
+  background: rgba(6, 9, 11, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--pf-ice-dim);
+  border-radius: 2px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6), inset 0 0 60px rgba(0, 0, 0, 0.3);
+  animation: pf-scale-in 0.22s ease both;
+}
+.pf--closing { animation: pf-scale-out 0.18s ease both; }
+@keyframes pf-scale-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes pf-scale-out { from { opacity: 1; } to { opacity: 0; transform: translateY(6px) scale(0.99); } }
+
+.pf__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pf__titles { display: flex; flex-direction: column; gap: 3px; }
+.pf__title {
+  font-family: var(--wg-space, var(--wg-mono));
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.pf__sub { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__x {
+  appearance: none;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--wg-faint);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--wg-ghost);
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.pf__x:hover { color: #fff; border-color: var(--pf-ice-dim); }
+
+.pf__rule { height: 1px; background: linear-gradient(90deg, var(--pf-ice-faint), rgba(255, 255, 255, 0.06), transparent); margin: 14px 0; }
+
+/* hero: callsign · level · score */
+.pf__hero { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+.pf__hero-card {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 1px solid var(--pf-ice-faint);
+}
+.pf__hero-k { font-size: 8px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__hero-v { margin-top: 5px; font-size: 17px; letter-spacing: 0.04em; color: #fff; word-break: break-word; }
+.pf__hero-v small { font-size: 10px; color: var(--pf-ice); letter-spacing: 0.1em; }
+.pf__levelbar { margin-top: 7px; height: 3px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; overflow: hidden; }
+.pf__levelbar i { display: block; height: 100%; background: var(--pf-ice-dim); }
+
+/* section heading */
+.pf__sh { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
+.pf__sh span { font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase; color: rgba(190, 220, 226, 0.8); }
+.pf__sh b { font-size: 9px; letter-spacing: 0.16em; font-weight: 400; color: var(--wg-faint); }
+
+/* compact key/value rows */
+.pf__rows { display: flex; flex-direction: column; gap: 1px; }
+.pf__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.pf__row:last-child { border-bottom: none; }
+.pf__row-k { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__row-v { font-size: 11px; letter-spacing: 0.04em; color: rgba(225, 233, 238, 0.95); text-align: right; }
+.pf__row-v.is-ice { color: var(--pf-ice); }
+.pf__row-v.is-off { color: var(--wg-faint); }
+
+/* small stat grid (resources) */
+.pf__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pf__cell {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.pf__cell-k { font-size: 8px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__cell-v { margin-top: 3px; font-size: 14px; color: #fff; }
+
+/* mission status strip (00..20) */
+.pf__strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.pf__dot {
+  width: 14px; height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid transparent;
+}
+.pf__dot.is-done { background: var(--pf-ice-dim); }
+.pf__dot.is-now { background: transparent; border-color: var(--pf-ice); }
+
+/* achievements */
+.pf__ach { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pf__ach-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  opacity: 0.4;
+}
+.pf__ach-item.is-on { opacity: 1; border-left: 1px solid var(--pf-ice-dim); }
+.pf__ach-name { font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(225, 233, 238, 0.95); }
+.pf__ach-item.is-on .pf__ach-name { color: #fff; }
+.pf__ach-desc { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__ach-tag { font-size: 8px; letter-spacing: 0.18em; color: var(--pf-ice); margin-top: 2px; }
+
+/* account status block */
+.pf__acct {
+  margin-top: 4px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.pf__acct-line { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+.pf__acct-line span { color: var(--wg-faint); }
+.pf__acct-line b { font-weight: 400; color: rgba(225, 233, 238, 0.92); }
+.pf__acct-line b.is-planned { color: var(--pf-ice); }
+
+/* footer + reset */
+.pf__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.pf__hint { font-size: 8px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--wg-faint); }
+.pf__reset, .pf__reset-yes, .pf__reset-no {
+  appearance: none; font: inherit; font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.3); border: 1px solid var(--wg-ghost); color: var(--wg-faint);
+  padding: 6px 10px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.pf__reset:hover { color: rgba(230, 150, 150, 0.95); border-color: rgba(200, 120, 120, 0.5); }
+.pf__confirm { display: inline-flex; align-items: center; gap: 6px; }
+.pf__confirm span { font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(230, 160, 160, 0.9); }
+.pf__reset-yes:hover { color: rgba(235, 140, 140, 1); border-color: rgba(210, 120, 120, 0.6); }
+.pf__reset-no:hover { color: #fff; border-color: var(--pf-ice-dim); }
+
+/* ================================ CALLSIGN PROMPT ================================ */
+.cs {
+  width: min(420px, 90vw);
+  padding: 22px 22px 16px;
+  font-family: var(--wg-mono);
+  color: rgba(220, 230, 236, 0.92);
+  background: rgba(6, 9, 11, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--pf-ice-dim);
+  border-radius: 2px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  animation: pf-scale-in 0.22s ease both;
+  text-align: left;
+}
+.cs__title { font-family: var(--wg-space, var(--wg-mono)); font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase; color: #fff; }
+.cs__sub { margin-top: 5px; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--wg-faint); }
+.cs__input {
+  width: 100%;
+  margin-top: 14px;
+  box-sizing: border-box;
+  font-family: var(--wg-mono);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid var(--pf-ice-dim);
+  padding: 9px 11px;
+  outline: none;
+}
+.cs__input:focus { border-color: var(--pf-ice); }
+.cs__rule-line { margin-top: 7px; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--wg-faint); }
+.cs__actions { display: flex; gap: 8px; margin-top: 16px; }
+.cs__go, .cs__skip {
+  appearance: none; font: inherit; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  padding: 8px 14px; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.cs__go { flex: 1; color: #061013; background: var(--pf-ice); border: 1px solid var(--pf-ice); }
+.cs__go:hover { background: #fff; border-color: #fff; }
+.cs__go:disabled { color: var(--wg-faint); background: rgba(255, 255, 255, 0.05); border-color: var(--wg-ghost); cursor: not-allowed; }
+.cs__skip { color: var(--wg-faint); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--wg-ghost); }
+.cs__skip:hover { color: #fff; border-color: var(--pf-ice-dim); }
+.cs__note { margin-top: 12px; font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--wg-faint); }
