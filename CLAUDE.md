@@ -13,6 +13,27 @@ machinery and source knowledge to author **a year of puzzles** without running d
 
 ---
 
+## 🛑 Six-Month Grid Build — READ `BUILD_STATUS.md` FIRST
+
+There is a long-term build plan to extend NEVA Network into a 6+ month, 4-class,
+event-driven game. The plan is split into **5 phases (0–4)**, each with its own
+TDD-style plan document in `docs/superpowers/plans/`. The full vision and all
+content bibles live in `docs/superpowers/MASTER_PLAN.md` (+ `.pdf`).
+
+**Before running any `/goal` on this build:**
+1. **Read `/Users/max/nevanetwork/BUILD_STATUS.md`** — it has the signed checklist of which phases are done.
+2. **Refuse to build Phase N if Phase N-1 is unchecked.** Tell the user and offer to run the missing prior phase.
+3. **Verify the marker file + test count** before trusting any ☑.
+
+**After completing any `/goal` on this build:**
+1. Update `BUILD_STATUS.md` — replace ☐ with ☑, add your signature (model · date · commit · test count).
+2. Append a one-line Notes-log entry.
+3. Commit `BUILD_STATUS.md` with message `docs: mark Phase N complete (signed)`.
+
+`BUILD_STATUS.md` is the contract between sessions. Do not break it.
+
+---
+
 ## Current state & guardrails (READ FIRST)
 
 **The game is fully playable Mission 00 → Mission 20** across two sectors. The full mission chain,
