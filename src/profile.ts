@@ -25,6 +25,8 @@ import type { GameState } from './game';
 export const PROFILE_VERSION = 1 as const;
 const KEY = 'neva:profile:v1';
 const BAK = 'neva:profile:v1:bak';
+const STORE_KEY = 'neva:profiles:v1';
+const STORE_BAK = 'neva:profiles:v1:bak';
 
 export const CALLSIGN_MIN = 3;
 export const CALLSIGN_MAX = 18;
@@ -34,6 +36,7 @@ export type AccountStatus = 'LOCAL_ONLY';
 
 export interface PlayerProfile {
   version: number;
+  id: string;
   callsign: string;
   profileCreatedAt: number;
   lastUpdatedAt: number;
@@ -56,6 +59,12 @@ export interface PlayerProfile {
   achievements: string[]; // unlocked achievement ids (accumulate; never removed)
   accountStatus: AccountStatus; // 'LOCAL_ONLY' for now
   futureAccountLink: null; // placeholder for a later remote account link
+}
+
+export interface ProfileStore {
+  version: number;
+  activeId: string | null;
+  profiles: PlayerProfile[];
 }
 
 // ----------------------------------------------------------------- callsign ---
@@ -81,6 +90,7 @@ export function generateDefaultCallsign(): string {
 export function createProfile(callsign: string, now = Date.now()): PlayerProfile {
   return {
     version: PROFILE_VERSION,
+    id: newProfileId(callsign, now),
     callsign,
     profileCreatedAt: now,
     lastUpdatedAt: now,
@@ -115,8 +125,86 @@ function migrateProfile(version: number, p: PlayerProfile): PlayerProfile | null
   return p;
 }
 
-/** Read the local profile (falling back to the `.bak`), or null if none/corrupt. */
-export function loadProfile(): PlayerProfile | null {
+function safeIdPart(callsign: string): string {
+  return callsign.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'operator';
+}
+
+function newProfileId(callsign: string, now = Date.now()): string {
+  const rnd =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${now.toString(36)}-${Math.floor(Math.random() * 0x100000).toString(36)}`;
+  return `profile-${safeIdPart(callsign)}-${rnd}`;
+}
+
+function legacyProfileId(callsign: string, now = Date.now()): string {
+  return `profile-${safeIdPart(callsign)}-${Math.floor(now)}`;
+}
+
+function normalizeProfile(input: Partial<PlayerProfile> | null): PlayerProfile | null {
+  if (!input || typeof input.version !== 'number' || typeof input.callsign !== 'string') return null;
+  const m = migrateProfile(input.version, input as PlayerProfile);
+  if (!m) return null;
+  const created = typeof m.profileCreatedAt === 'number' ? m.profileCreatedAt : Date.now();
+  const base = createProfile(m.callsign, created);
+  const id = typeof m.id === 'string' && m.id.trim() ? m.id : legacyProfileId(m.callsign, created);
+  const achievements = Array.isArray(m.achievements) ? m.achievements.filter((a) => typeof a === 'string') : [];
+  return {
+    ...base,
+    ...m,
+    id,
+    version: PROFILE_VERSION,
+    achievements,
+    futureAccountLink: null,
+  };
+}
+
+function normalizeStore(raw: unknown): ProfileStore | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const parsed = raw as Partial<ProfileStore>;
+  if (parsed.version !== PROFILE_VERSION || !Array.isArray(parsed.profiles)) return null;
+  const seen = new Set<string>();
+  const profiles: PlayerProfile[] = [];
+  for (const p of parsed.profiles) {
+    const normalized = normalizeProfile(p);
+    if (!normalized || seen.has(normalized.id)) continue;
+    seen.add(normalized.id);
+    profiles.push(normalized);
+  }
+  const activeId =
+    typeof parsed.activeId === 'string' && profiles.some((p) => p.id === parsed.activeId)
+      ? parsed.activeId
+      : profiles[0]?.id ?? null;
+  return { version: PROFILE_VERSION, activeId, profiles };
+}
+
+function emptyStore(): ProfileStore {
+  return { version: PROFILE_VERSION, activeId: null, profiles: [] };
+}
+
+function persistStore(store: ProfileStore): void {
+  try {
+    const json = JSON.stringify(store);
+    JSON.parse(json);
+    const existing = localStorage.getItem(STORE_KEY);
+    if (existing) localStorage.setItem(STORE_BAK, existing);
+    localStorage.setItem(STORE_KEY, json);
+    const active = store.profiles.find((p) => p.id === store.activeId) ?? store.profiles[0] ?? null;
+    if (active) {
+      const previous = localStorage.getItem(KEY);
+      if (previous) localStorage.setItem(BAK, previous);
+      localStorage.setItem(KEY, JSON.stringify(active));
+    } else {
+      localStorage.removeItem(KEY);
+      localStorage.removeItem(BAK);
+    }
+  } catch {
+    /* quota exceeded / storage disabled — skip this write */
+  }
+}
+
+/** Read the legacy single local profile (falling back to `.bak`), or null if none/corrupt. */
+function loadLegacyProfile(): PlayerProfile | null {
   let raw: string | null;
   try {
     raw = localStorage.getItem(KEY) ?? localStorage.getItem(BAK);
@@ -125,38 +213,98 @@ export function loadProfile(): PlayerProfile | null {
   }
   if (!raw) return null;
   try {
-    const p = JSON.parse(raw) as PlayerProfile;
-    if (!p || typeof p.version !== 'number' || typeof p.callsign !== 'string') return null;
-    const m = migrateProfile(p.version, p);
-    if (!m) return null;
-    // merge saved over a fresh default so older/partial blobs gain new fields safely
-    return { ...createProfile(m.callsign, m.profileCreatedAt || Date.now()), ...m, version: PROFILE_VERSION };
+    return normalizeProfile(JSON.parse(raw) as Partial<PlayerProfile>);
   } catch {
     return null;
   }
 }
 
-/** Write the local profile (validates round-trip, keeps one `.bak`). Safe to call often. */
-export function writeProfile(p: PlayerProfile): void {
+export function loadProfileStore(): ProfileStore {
   try {
-    const json = JSON.stringify(p);
-    JSON.parse(json); // round-trip validation before touching the live slot
-    const existing = localStorage.getItem(KEY);
-    if (existing) localStorage.setItem(BAK, existing);
-    localStorage.setItem(KEY, json);
+    const raw = localStorage.getItem(STORE_KEY) ?? localStorage.getItem(STORE_BAK);
+    if (raw) {
+      const store = normalizeStore(JSON.parse(raw));
+      if (store) return store;
+    }
   } catch {
-    /* quota exceeded / storage disabled — skip this write */
+    /* fall through to legacy migration */
   }
+  const legacy = loadLegacyProfile();
+  if (!legacy) return emptyStore();
+  const store = { version: PROFILE_VERSION, activeId: legacy.id, profiles: [legacy] };
+  persistStore(store);
+  return store;
 }
 
-/** Remove the local profile entirely (RESET PROFILE — gameplay save is left untouched). */
-export function clearProfile(): void {
+/** Read the active local profile, or null if none/corrupt. */
+export function loadProfile(): PlayerProfile | null {
+  const store = loadProfileStore();
+  return store.profiles.find((p) => p.id === store.activeId) ?? store.profiles[0] ?? null;
+}
+
+/** Read every local profile in switcher display order. */
+export function loadProfiles(): PlayerProfile[] {
+  return loadProfileStore().profiles;
+}
+
+/** Write/upsert the active local profile. Safe to call often. */
+export function writeProfile(p: PlayerProfile): void {
+  const normalized = normalizeProfile(p);
+  if (!normalized) return;
+  const store = loadProfileStore();
+  const profiles = store.profiles.some((existing) => existing.id === normalized.id)
+    ? store.profiles.map((existing) => (existing.id === normalized.id ? normalized : existing))
+    : [...store.profiles, normalized];
+  persistStore({ version: PROFILE_VERSION, activeId: normalized.id, profiles });
+}
+
+/** Create and persist a new active local profile. */
+export function addProfile(callsign: string): PlayerProfile {
+  const profile = createProfile(callsign);
+  writeProfile(profile);
+  return profile;
+}
+
+/** Switch the active local profile by id. Returns the selected profile, or null if missing. */
+export function switchProfile(id: string): PlayerProfile | null {
+  const store = loadProfileStore();
+  const selected = store.profiles.find((p) => p.id === id) ?? null;
+  if (!selected) return null;
+  persistStore({ ...store, activeId: selected.id });
+  return selected;
+}
+
+/** Delete one local profile. Returns the next active profile, or null when none remain. */
+export function deleteProfile(id: string): PlayerProfile | null {
+  const store = loadProfileStore();
+  const profiles = store.profiles.filter((p) => p.id !== id);
+  const activeId = store.activeId === id ? profiles[0]?.id ?? null : store.activeId;
+  const next = { version: PROFILE_VERSION, activeId, profiles };
+  persistStore(next);
+  return next.profiles.find((p) => p.id === next.activeId) ?? next.profiles[0] ?? null;
+}
+
+export function callsignTaken(callsign: string, ignoreId?: string): boolean {
+  const target = callsign.trim().toLowerCase();
+  return loadProfiles().some((p) => p.id !== ignoreId && p.callsign.trim().toLowerCase() === target);
+}
+
+/** Remove all local profiles. Gameplay save is left untouched. */
+export function clearAllProfiles(): void {
   try {
+    localStorage.removeItem(STORE_KEY);
+    localStorage.removeItem(STORE_BAK);
     localStorage.removeItem(KEY);
     localStorage.removeItem(BAK);
   } catch {
     /* ignore */
   }
+}
+
+/** Remove the active local profile. Gameplay save is left untouched. */
+export function clearProfile(): void {
+  const active = loadProfile();
+  if (active) deleteProfile(active.id);
 }
 
 // ----------------------------------------------- live derivations from GameState ---

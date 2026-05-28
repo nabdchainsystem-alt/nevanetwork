@@ -10,6 +10,9 @@ import NevaCorePanel from './components/NevaCorePanel';
 import PlaytestNotesPanel from './components/PlaytestNotesPanel';
 import ProfilePanel from './components/ProfilePanel';
 import CallsignPrompt from './components/CallsignPrompt';
+import SectorTransition from './components/SectorTransition';
+import { A02_OPTS, SECTOR_A02 } from './sectorGen';
+import { SECTORS } from './sectors';
 import TouchControls from './components/TouchControls';
 import { useIsTouch } from './useIsTouch';
 import { gameReducer, initGame, gatewaysAtDepth, nodesOfType, traceTier, nodeType, recommendedAction, threatState, coreSecured, TUTORIAL_NODES, getCurrentObjectiveNodeId, objectiveKey, type NodeType, type GameState } from './game';
@@ -22,10 +25,11 @@ import { terminalNav } from './terminalNav';
 import { uiCapture } from './uiCapture';
 import { type TerminalEffect } from './terminal';
 import { NETWORK } from './network';
-import { loadSave, writeSave, loadCheckpoint, writeCheckpoint, clearCheckpoint } from './save';
+import { loadSave, writeSave, clearSave, loadCheckpoint, writeCheckpoint, clearCheckpoint } from './save';
 import { applyUiSettings, defaultUiSettings, loadUiSettings, saveUiSettings, type UiSettings } from './uiSettings';
 import { capturePlaytestContext, checkpointSummary, loadPlaytestNotes, makeNote, savePlaytestNotes, clearStoredPlaytestNotes, type PlaytestCategory, type PlaytestNote } from './playtest';
-import { loadProfile, writeProfile, clearProfile, createProfile, syncProfile, sanitizeCallsign, generateDefaultCallsign } from './profile';
+import { loadProfile, loadProfiles, writeProfile, deleteProfile, createProfile, switchProfile, syncProfile, sanitizeCallsign, generateDefaultCallsign } from './profile';
+import { deriveActionFx, type FxEvent } from './actionFx';
 
 /**
  * The interactive network explorer + interface-game. Mounted once the operator has
@@ -38,6 +42,8 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   const [locked, setLocked] = useState(false);
   const [muted, setMuted] = useState(false);
   const [devScan, setDevScan] = useState(false); // developer node-type overlay — toggled with V (D is strafe-right)
+  const [enhancedVisuals, setEnhancedVisuals] = useState(true); // VISUAL MODE (K): ENHANCED (default) vs CLASSIC — proves the rendering upgrade
+  const [sectorTransition, setSectorTransition] = useState(false); // playing the A01 → A02 cinematic transition
   const [devNotice, setDevNotice] = useState<string | null>(null); // transient dev HUD line
   const [terminalOpen, setTerminalOpen] = useState(false); // NEVA command terminal (Space)
   const [terminalClosing, setTerminalClosing] = useState(false); // playing the retract animation
@@ -54,6 +60,10 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   const [transitionHint, setTransitionHint] = useState<string | null>(null); // brief "NEXT SIGNAL LOCATED" cue on an objective transition
   const [missionWarp, setMissionWarp] = useState(false); // brief light-speed "route shift" overlay on a major mission change
   const [coreSweep, setCoreSweep] = useState(false); // brief "core stabilization" sweep on a CORE / ALPHA CORE moment
+  // Visual Upgrade Pass v2 — transient cinematic action FX (export/trace/isolate/openStream/dive/core/
+  // fail), derived from game-state transitions; purely visual, never stored in the save.
+  const [fxEvents, setFxEvents] = useState<FxEvent[]>([]);
+  const [diveFlash, setDiveFlash] = useState(false); // brief screen "depth dive" warp flash on ENTER_SUBNETWORK
   // NEVA Core Assistant v1 — advisory hint panel (backend OpenAI; read-only, never changes the game)
   const [nevaOpen, setNevaOpen] = useState(false);
   const [nevaLoading, setNevaLoading] = useState(false);
@@ -67,12 +77,19 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   // Player Profile (Phase 7) — local operator identity, persisted in its OWN localStorage slot
   // (see profile.ts). Fully separate from the game save so a session reset keeps the identity.
   const [profile, setProfile] = useState(loadProfile);
+  const [profiles, setProfiles] = useState(loadProfiles);
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  const currentProfileId = () => profileRef.current?.id ?? null;
   const [profileOpen, setProfileOpen] = useState(false); // NEVA // PLAYER PROFILE panel (L)
   const [profileClosing, setProfileClosing] = useState(false);
   const needsCallsign = profile === null; // first run with no local profile → CREATE CALLSIGN prompt
   const [guideNode, setGuideNode] = useState<number | null>(null); // Mission 00: node the camera gently FRAMES (no selection / no panel) until the player clicks it
-  // resume a saved session if one exists (read once, lazily)
-  const [saved] = useState(loadSave);
+  // resume the active profile's saved session if one exists; fall back once to the legacy shared slot.
+  const [saved] = useState(() => {
+    const scoped = profile?.id ? loadSave(profile.id) : null;
+    return scoped ?? loadSave();
+  });
   const [game, dispatch] = useReducer(gameReducer, undefined, () => saved?.game ?? initGame());
 
   const [continued, setContinued] = useState(saved?.continued ?? false); // dismissed the complete overlay
@@ -93,6 +110,9 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   // node opens the Player Subnetwork panel instead of the node inspection panel.
   const handleSelect = useCallback((i: number | null) => {
     const g = gameRef.current;
+    // Sector A02 is free-scan only (no node interaction wired yet) — ignore A01-index picks so a
+    // click never selects a hidden A01 node / flies the camera to a phantom A01 position.
+    if (g.sectorProgress.currentSector === 'A02') { setSelected(null); return; }
     // Mission 00 intro: only the revealed tutorial nodes (0..step) are selectable — the rest of
     // the network is hidden, so a stray ray on empty space never picks a concealed node.
     if (i != null && !g.networkRevealed && !TUTORIAL_NODES.slice(0, g.mission00.step + 1).includes(i)) return;
@@ -147,7 +167,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     if (saveTimer.current != null) return; // a write is already queued for this window
     saveTimer.current = window.setTimeout(() => {
       saveTimer.current = undefined;
-      writeSave(gameRef.current, continuedRef.current); // writes the LATEST state
+      writeSave(gameRef.current, continuedRef.current, currentProfileId()); // writes the LATEST state
     }, 1500);
   }, [game, continued]);
 
@@ -157,10 +177,14 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   // the next mission, whose MISSION_START captures; the final mission's Continue captures
   // explicitly in `continueNetwork`.) Writes a ref + a separate localStorage slot (with .bak),
   // and never captures a locked/failed state. ---
-  const checkpoint = useRef<GameState | null>(loadCheckpoint());
+  const [initialCheckpoint] = useState(() => {
+    const scoped = profile?.id ? loadCheckpoint(profile.id) : null;
+    return scoped ?? loadCheckpoint();
+  });
+  const checkpoint = useRef<GameState | null>(initialCheckpoint);
   // a render-safe label of the latest checkpoint (the Playtest Notes panel reads this in render;
   // accessing the ref's .current during render is disallowed). Updated wherever the checkpoint changes.
-  const [checkpointLabel, setCheckpointLabel] = useState(() => checkpointSummary(loadCheckpoint()));
+  const [checkpointLabel, setCheckpointLabel] = useState(() => checkpointSummary(initialCheckpoint));
   const cpPrev = useRef({
     missionStarted: game.missionStarted,
     depth: game.currentDepth,
@@ -169,7 +193,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   const captureCheckpoint = useCallback((g: GameState) => {
     if (g.locked) return;
     checkpoint.current = g;
-    writeCheckpoint(g);
+    writeCheckpoint(g, currentProfileId());
     setCheckpointLabel(checkpointSummary(g));
   }, []);
   useEffect(() => {
@@ -188,7 +212,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
 
   // flush immediately when the tab is closing / hidden, so nothing is lost
   useEffect(() => {
-    const flush = () => writeSave(gameRef.current, continuedRef.current);
+    const flush = () => writeSave(gameRef.current, continuedRef.current, currentProfileId());
     const onVis = () => {
       if (document.hidden) flush();
     };
@@ -223,8 +247,8 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   // (you keep flying/playing) — only typing in its input field captures keys.
   useEffect(() => {
     uiCapture.active =
-      (terminalOpen && !terminalPinned) || upgradesOpen || subnetOpen || settingsOpen || profileOpen || needsCallsign;
-  }, [terminalOpen, terminalPinned, upgradesOpen, subnetOpen, settingsOpen, profileOpen, needsCallsign]);
+      (terminalOpen && !terminalPinned) || upgradesOpen || subnetOpen || settingsOpen || profileOpen || needsCallsign || sectorTransition;
+  }, [terminalOpen, terminalPinned, upgradesOpen, subnetOpen, settingsOpen, profileOpen, needsCallsign, sectorTransition]);
 
   // refs the (stable) capture-phase key listener reads
   const terminalOpenRef = useRef(terminalOpen);
@@ -425,13 +449,36 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     }
   }, [game]);
 
+  // Visual Upgrade Pass v2 — derive transient action FX from each game-state transition (visual only;
+  // never mutates state/save). New events are appended (capped) and auto-pruned after their lifetime.
+  // ENTER_SUBNETWORK also triggers a brief screen "depth dive" warp flash.
+  const fxPrevGame = useRef(game);
+  const fxTimers = useRef<number[]>([]);
+  useEffect(() => {
+    const prev = fxPrevGame.current;
+    fxPrevGame.current = game;
+    if (prev === game) return;
+    const evs = deriveActionFx(prev, game, performance.now());
+    if (evs.length === 0) return;
+    setFxEvents((cur) => [...cur, ...evs].slice(-8)); // cap concurrent effects
+    for (const e of evs) {
+      const t = window.setTimeout(() => setFxEvents((cur) => cur.filter((x) => x.id !== e.id)), e.duration + 140);
+      fxTimers.current.push(t);
+      if (e.type === 'enterSubnetwork') {
+        setDiveFlash(true);
+        window.setTimeout(() => setDiveFlash(false), 760);
+      }
+    }
+  }, [game]);
+  useEffect(() => () => { fxTimers.current.forEach((t) => clearTimeout(t)); }, []);
+
   // upgrades are a deliberate, infrequent purchase — flush the save immediately on change so a
   // refresh right after buying never loses it (the throttled autosave would lag up to ~1.5s)
   const upgradesRef = useRef(game.upgrades);
   useEffect(() => {
     if (game.upgrades !== upgradesRef.current) {
       upgradesRef.current = game.upgrades;
-      writeSave(game, continued);
+      writeSave(game, continued, currentProfileId());
     }
   }, [game, continued]);
 
@@ -486,7 +533,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     setSelected(null);
     setContinued(false);
     checkpoint.current = null;
-    clearCheckpoint();
+    clearCheckpoint(currentProfileId());
     setCheckpointLabel('NONE');
     dispatch({ type: 'RESET' });
     playReturn();
@@ -499,7 +546,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     pendingSubnetOpenRef.current = null;
     setSelected(null);
     setContinued(false);
-    dispatch({ type: 'LOAD_CHECKPOINT', checkpoint: checkpoint.current ?? loadCheckpoint() });
+    dispatch({ type: 'LOAD_CHECKPOINT', checkpoint: checkpoint.current ?? loadCheckpoint(currentProfileId()) });
     playReturn();
   }, []);
 
@@ -513,6 +560,24 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     else setContinued(true);
     captureCheckpoint(gameRef.current);
   }, [captureCheckpoint]);
+
+  // ─────────── Sector A01 → A02 transition ───────────
+  // ENTER SECTOR A02 (from the Mission-20 / A01-complete overlay): dismiss the overlay + clear focus,
+  // then play the cinematic. The cinematic's onEnter switches the sector (the new grid mounts +
+  // reveals behind the black overlay); onDone unmounts the overlay so the reveal is seen. No gameplay
+  // wipe — profile/resources/upgrades/subnetwork all persist (handled in the reducer + save).
+  const sectorTransitionRef = useRef(sectorTransition);
+  useEffect(() => { sectorTransitionRef.current = sectorTransition; }, [sectorTransition]);
+  const enterSectorA02 = useCallback(() => {
+    setContinued(true);
+    setSelected(null);
+    dispatch({ type: 'CLOSE_STREAM' });
+    setSectorTransition(true);
+  }, []);
+  const onSectorA02Enter = useCallback(() => {
+    dispatch({ type: 'ENTER_SECTOR_A02' }); // switch to A02 → new grid mounts + begins its reveal
+  }, []);
+  const onSectorA02Done = useCallback(() => setSectorTransition(false), []);
 
   // FOCUS OBJECTIVE (reusable fallback) — recenter on the current mission target without the
   // player hunting for it. Reuses the existing focus glide: setSelected(node) eases the orbit to
@@ -625,6 +690,20 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     }
   }, []);
 
+  // Missions 04 (PRIVATE GRID) and 15 (PRIVATE GRID OVERLOAD) complete by INSTALLING a module /
+  // upgrade — and that install happens INSIDE the UPGRADES [U] / PLAYER SUBNETWORK [B] panel (while
+  // it's open it owns the keyboard, so an install is the only way a mission can complete here). When
+  // that install completes the mission, auto-close the panel so the completion overlay reads cleanly
+  // and the player isn't left staring at the still-open panel.
+  const prevCompleteForPanels = useRef(game.missionComplete);
+  useEffect(() => {
+    const justCompleted = game.missionComplete && !prevCompleteForPanels.current;
+    prevCompleteForPanels.current = game.missionComplete;
+    if (!justCompleted) return;
+    if (upgradesOpenRef.current) closeUpgrades();
+    if (subnetOpenRef.current) closeSubnet();
+  }, [game.missionComplete, closeUpgrades, closeSubnet]);
+
   // --- Interface settings panel: readability only, no gameplay state. ---
   const SETTINGS_CLOSE_MS = 760;
   const settingsCloseTimer = useRef<number | undefined>(undefined);
@@ -720,11 +799,8 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
 
   // ============================ PLAYER PROFILE (Phase 7) ============================
   // A LOCAL-FIRST operator identity layer in its OWN localStorage slot (profile.ts), fully
-  // separate from the game save/checkpoint — so Shift+R (RESET), checkpoint retry, and soft-R all
-  // keep the identity, and the pure reducer / save schema stay untouched. The profile is a
-  // high-water-mark snapshot of progression (+ achievements); it NEVER changes gameplay.
-  const profileRef = useRef(profile);
-  useEffect(() => { profileRef.current = profile; }, [profile]);
+  // paired with its own game save/checkpoint slot. The profile is a high-water-mark snapshot of
+  // progression (+ achievements); switching accounts swaps the active local run too.
   const profileOpenRef = useRef(profileOpen);
   useEffect(() => { profileOpenRef.current = profileOpen; }, [profileOpen]);
   const needsCallsignRef = useRef(needsCallsign);
@@ -750,8 +826,47 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     if (next !== p) {
       setProfile(next);
       writeProfile(next);
+      setProfiles(loadProfiles());
     }
   }, [game]);
+
+  const persistActiveRun = useCallback(() => {
+    const id = currentProfileId();
+    writeSave(gameRef.current, continuedRef.current, id);
+    if (checkpoint.current) writeCheckpoint(checkpoint.current, id);
+  }, []);
+
+  const applyProfileRun = useCallback((profileId: string, fallbackLegacy = false) => {
+    const loaded = loadSave(profileId) ?? (fallbackLegacy ? loadSave() : null);
+    const nextGame = loaded?.game ?? initGame();
+    const nextCheckpoint = loadCheckpoint(profileId) ?? (fallbackLegacy ? loadCheckpoint() : null);
+    pendingSubnetOpenRef.current = null;
+    checkpoint.current = nextCheckpoint;
+    cpPrev.current = {
+      missionStarted: nextGame.missionStarted,
+      depth: nextGame.currentDepth,
+      route: nextGame.nextGatewayFound,
+    };
+    prevLockedRef.current = nextGame.locked;
+    prevMissionCompleteRef.current = nextGame.missionComplete;
+    lastObjectiveKeyRef.current = null;
+    pendingMissionWarpRef.current = false;
+    prevTutorialCompleteRef.current = nextGame.mission00.complete;
+    prevMissionIdRef.current = nextGame.missionId;
+    prevStartedRef.current = nextGame.missionStarted;
+    subUnlockedRef.current = nextGame.playerSubnetwork.unlocked;
+    coreSecuredM7Ref.current = nextGame.missionId === 7 && coreSecured(nextGame);
+    alphaStabRef.current = nextGame.alphaCoreStabilized;
+    sectorSecuredRef.current = nextGame.sectorA02Secured;
+    fxPrevGame.current = nextGame;
+    setSelected(null);
+    setGuideNode(nextGame.mission00.complete ? null : getCurrentObjectiveNodeId(nextGame));
+    setFxEvents([]);
+    setContinued(loaded?.continued ?? false);
+    setCheckpointLabel(checkpointSummary(nextCheckpoint));
+    dispatch({ type: 'LOAD_GAME', game: nextGame });
+    return nextGame;
+  }, []);
 
   // CREATE CALLSIGN — build the local profile (a sanitized callsign, or an OPERATOR-XXXX default on
   // skip), then immediately fold in the current run's progress so an existing save shows at once.
@@ -762,7 +877,41 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
     const final = synced === fresh ? fresh : synced;
     setProfile(final);
     writeProfile(final);
+    writeSave(gameRef.current, continuedRef.current, final.id);
+    if (checkpoint.current) writeCheckpoint(checkpoint.current, final.id);
+    setProfiles(loadProfiles());
   }, []);
+
+  const createAdditionalProfile = useCallback((raw: string) => {
+    const name = sanitizeCallsign(raw);
+    if (!name) return;
+    persistActiveRun();
+    const fresh = createProfile(name);
+    const freshGame = initGame();
+    const synced = syncProfile(fresh, freshGame, { traceLockedEdge: false, cleanCompleteEdge: false });
+    const final = synced === fresh ? fresh : synced;
+    setProfile(final);
+    writeProfile(final);
+    clearSave(final.id);
+    clearCheckpoint(final.id);
+    writeSave(freshGame, false, final.id);
+    applyProfileRun(final.id);
+    setProfiles(loadProfiles());
+    playSelect();
+  }, [applyProfileRun, persistActiveRun]);
+
+  const switchActiveProfile = useCallback((id: string) => {
+    persistActiveRun();
+    const selected = switchProfile(id);
+    if (!selected) return;
+    const nextGame = applyProfileRun(selected.id);
+    const synced = syncProfile(selected, nextGame, { traceLockedEdge: false, cleanCompleteEdge: false });
+    const final = synced === selected ? selected : synced;
+    setProfile(final);
+    writeProfile(final);
+    setProfiles(loadProfiles());
+    playSelect();
+  }, [applyProfileRun, persistActiveRun]);
 
   // PLAYER PROFILE panel open/close (modal — one modal at a time, like UPGRADES / SUBNETWORK).
   const PROFILE_CLOSE_MS = 640;
@@ -789,16 +938,38 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
       profileClosingRef.current = false;
     }, PROFILE_CLOSE_MS);
   }, []);
-  // RESET PROFILE (from inside the panel, after a confirm): clear the LOCAL identity ONLY — the
-  // gameplay save/checkpoint are untouched — then re-show the callsign prompt for a fresh identity.
+  // DELETE PROFILE (from inside the panel, after a confirm): remove the ACTIVE local identity and
+  // its run/checkpoint slot. If another profile exists, switch to that account's run; otherwise
+  // show the callsign prompt for a fresh identity.
   const handleResetProfile = useCallback(() => {
     window.clearTimeout(profileCloseTimer.current);
     profileClosingRef.current = false;
     setProfileClosing(false);
-    setProfileOpen(false);
-    clearProfile();
-    setProfile(null);
-  }, []);
+    const active = profileRef.current;
+    if (active) {
+      clearSave(active.id);
+      clearCheckpoint(active.id);
+    }
+    const next = active ? deleteProfile(active.id) : null;
+    if (next) {
+      const nextGame = applyProfileRun(next.id);
+      const synced = syncProfile(next, nextGame, { traceLockedEdge: false, cleanCompleteEdge: false });
+      const final = synced === next ? next : synced;
+      setProfile(final);
+      writeProfile(final);
+      setProfiles(loadProfiles());
+      setProfileOpen(true);
+    } else {
+      checkpoint.current = null;
+      setCheckpointLabel('NONE');
+      setContinued(false);
+      setSelected(null);
+      dispatch({ type: 'LOAD_GAME', game: initGame() });
+      setProfileOpen(false);
+      setProfile(null);
+      setProfiles(loadProfiles());
+    }
+  }, [applyProfileRun]);
 
   // carry out a terminal command's world/game effect; returns extra result lines to print
   const runTerminalEffect = useCallback(
@@ -819,6 +990,22 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
           g.missionId < 20 ? '  CONTINUE NETWORK → NEXT MISSION' : '  FINAL MISSION · KEEP PLAYING';
         return [`▸ MISSION ${id} FORCE-COMPLETED (DEV)`, nextLine];
       }
+      if (effect.kind === 'enterA02') {
+        // DEV: play the A01 → A02 sector transition (testing). Same path as the ENTER SECTOR A02 button.
+        if (gameRef.current.sectorProgress.currentSector === 'A02') return ['▸ ALREADY IN SECTOR A02'];
+        enterSectorA02();
+        return ['▸ SECTOR A02 ROUTE OPENED · TRANSITION ENGAGED (DEV)'];
+      }
+      if (effect.kind === 'gotoMission') {
+        // DEV: jump straight to a mission's briefing for fast testing.
+        const n = effect.mission;
+        if (!Number.isFinite(n) || n < 1 || n > 20) return ['▸ MISSION OUT OF RANGE · USE 01–20'];
+        const id = Math.floor(n);
+        dispatch({ type: 'GOTO_MISSION', mission: id });
+        closeTerminal(); // get the modal out of the way so the target mission's briefing is visible
+        const meta = MISSION_META[id] ?? MISSION_META[1];
+        return [`▸ JUMP → MISSION ${String(id).padStart(2, '0')} (DEV) · BEGIN FROM BRIEFING`, `  ${meta.name}`];
+      }
       if (effect.kind !== 'goto') return []; // clear / close are handled in the component
       // goto: cycle through the nodes of this type so repeats visit a DIFFERENT one. First
       // call for a type → the nearest; each repeat → the next in the list (wrapping).
@@ -838,7 +1025,7 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
       const total = String(list.length).padStart(2, '0');
       return [`▸ ROUTING → ${effect.type} ${n}/${total}`, `  NODE ${NETWORK.meta[id].id}`];
     },
-    [handleSelect],
+    [handleSelect, enterSectorA02, closeTerminal],
   );
 
   // brief dev-only HUD notice (e.g. "NO GATEWAY FOUND IN CURRENT DEPTH")
@@ -889,6 +1076,8 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
       // First-run CREATE CALLSIGN prompt owns the keyboard (typing into its field) — stand down so
       // letters reach the input and flight/hotkeys don't fire. The prompt handles Enter itself.
       if (needsCallsignRef.current) return;
+      // The A01→A02 cinematic owns the keyboard (its own Enter/Space = skip); stand fully down.
+      if (sectorTransitionRef.current) return;
 
       // terminal open: ESC always closes it. A MODAL (centred) terminal owns the whole keyboard;
       // a PINNED (docked) terminal only grabs Space (refocus its prompt) and lets every other key
@@ -997,6 +1186,13 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
         if (!e.repeat) togglePlaytest();
         return;
       }
+      // K = toggle VISUAL MODE (CLASSIC ↔ ENHANCED) — proves the rendering upgrade. Consumed so it never flies.
+      if (e.code === 'KeyK') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (!e.repeat) setEnhancedVisuals((v) => !v);
+        return;
+      }
       // L = open PLAYER PROFILE (post-tutorial, once a local identity exists). Consumed so it never flies.
       if (e.code === 'KeyL') {
         e.preventDefault();
@@ -1078,10 +1274,9 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
   // visual category for the marker (Phase 4) — DATA / FIREWALL / CORRUPTION / RELAY / CORE accent.
   const objectiveKind = objectiveVisualKind(objTarget);
 
-  // Sector A02 finale: completing the FINAL mission (20 // SECTOR A02 SECURED) shows a one-screen
-  // summary (continued free play still allowed via CONTINUE NETWORK). Missions 12–19 now advance
-  // onward, so the summary is gated to the true arc finale (Mission 20).
-  const prototypeDone = game.missionId >= 20 && game.missionComplete;
+  // Sector A01 complete: finishing Mission 20 SECURES Sector A01 + unlocks the route to Sector A02.
+  // The finale shows a summary + the ENTER SECTOR A02 transition (hidden once already in A02).
+  const prototypeDone = game.missionId >= 20 && game.missionComplete && !game.sectorProgress.a02Entered;
   const securedCount = Object.values(game.statuses).filter(
     (st) => st && (st.extracted || st.isolated || st.unlocked),
   ).length;
@@ -1105,6 +1300,9 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
         devScan={devScan}
         scanOn={scanOn}
         backgroundNoise={uiSettings.backgroundNoise}
+        actionFx={fxEvents}
+        enhanced={enhancedVisuals}
+        showLinks={uiSettings.showLinks}
       />
       <ExplorerHud
         selected={selected}
@@ -1121,6 +1319,16 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
       {/* discreet return to the landing page (resumes the run on re-entry) */}
       <button className="hud__intro" onClick={onShowIntro} type="button" title="Exit to landing page">
         ⏏ EXIT
+      </button>
+
+      {/* VISUAL MODE readout + toggle (K) — proves the CLASSIC ↔ ENHANCED rendering difference */}
+      <button
+        className={`visual-mode${enhancedVisuals ? ' is-enhanced' : ''}`}
+        type="button"
+        onClick={() => setEnhancedVisuals((v) => !v)}
+        title="Toggle visual mode (K)"
+      >
+        VISUAL MODE: {enhancedVisuals ? 'ENHANCED' : 'CLASSIC'} <kbd>K</kbd>
       </button>
 
       {/* NEVA Core Assistant — small launcher (post-tutorial) + advisory hint panel (N). Read-only. */}
@@ -1199,8 +1407,11 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
         <ProfilePanel
           game={game}
           profile={profile}
+          profiles={profiles}
           closing={profileClosing}
           onClose={closeProfile}
+          onCreateProfile={createAdditionalProfile}
+          onSwitchProfile={switchActiveProfile}
           onResetProfile={handleResetProfile}
         />
       )}
@@ -1224,6 +1435,10 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
       {/* CORE / ALPHA CORE stabilization sweep — a brief screen-wide "system online" line + glow */}
       {coreSweep && <div className="core-sweep" aria-hidden />}
 
+      {/* depth-dive warp flash — a brief radial impulse on ENTER_SUBNETWORK (pairs with the in-world
+          route convergence + the existing DEPTH 0N ACCESSED overlay); pointer-events none. */}
+      {diveFlash && <div className="fx-dive" aria-hidden />}
+
       {/* brief objective-transition cue ("NEXT SIGNAL LOCATED") — the camera is guiding to the next node */}
       {transitionHint && <div className="transition-hint" key={transitionHint}>▸ {transitionHint}</div>}
 
@@ -1232,8 +1447,10 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
         <Mission00Intro game={game} selected={selected} objectiveNode={getCurrentObjectiveNodeId(game)} />
       )}
 
-      {/* Mission 00 complete → the network reveal hand-off into Mission 01 */}
-      {game.mission00.complete && !game.missionStarted && (
+      {/* Mission 00 complete → the network reveal hand-off into Mission 01 (only the M00→M01 step;
+          missions 02–20 use the standalone briefing below — also keeps a dev mission-jump from
+          surfacing this "MISSION 01 UNLOCKED" screen for a higher mission). */}
+      {game.mission00.complete && !game.missionStarted && game.missionId <= 1 && (
         <div className="mx" onClick={beginMission}>
           <div className="mx__box">
             <div className="mx__brand">NEVA NETWORK</div>
@@ -1268,16 +1485,16 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
         </div>
       )}
 
-      {/* mission complete — never forces a stop. The final mission shows the PROTOTYPE v1 summary. */}
-      {game.missionComplete && !continued && (
+      {/* mission complete — never forces a stop. Mission 20 = SECTOR A01 COMPLETE → ENTER SECTOR A02. */}
+      {game.missionComplete && !continued && !game.sectorProgress.a02Entered && (
         <div className={`mx${prototypeDone ? ' mx--finale' : ''}`}>
           <div className="mx__box">
             {prototypeDone ? (
               <>
                 <div className="mx__brand">NEVA NETWORK</div>
-                <div className="mx__title">SECTOR A02 SECURED</div>
+                <div className="mx__title">SECTOR A01 COMPLETE</div>
                 <div className="mx__sub">ALPHA CORE ONLINE</div>
-                <div className="mx__sub">NEXT SECTOR LOCKED</div>
+                <div className="mx__sub">NEXT SECTOR ROUTE OPEN</div>
                 <div className="mx__rule" />
                 <div className="mx__sub">DATA EXTRACTED · {game.extractedData}</div>
                 <div className="mx__sub">CORE FRAGMENTS · {game.resources.coreFragments}</div>
@@ -1293,10 +1510,44 @@ export default function Game({ onShowIntro }: { onShowIntro: () => void }) {
             )}
             <div className="mx__rule" />
             <div className="mx__actions">
-              <button className="mx__go" onClick={continueNetwork}>CONTINUE NETWORK</button>
-              <button className="mx__alt" onClick={resetSession}>RESET SESSION</button>
+              {prototypeDone ? (
+                <>
+                  <button className="mx__go" onClick={enterSectorA02}>ENTER SECTOR A02</button>
+                  <button className="mx__alt" onClick={() => setContinued(true)}>STAY IN A01</button>
+                </>
+              ) : (
+                <>
+                  <button className="mx__go" onClick={continueNetwork}>CONTINUE NETWORK</button>
+                  <button className="mx__alt" onClick={resetSession}>RESET SESSION</button>
+                </>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* persistent ENTER SECTOR A02 affordance — once A01 is complete (route unlocked) and not yet
+          entered. Covers any save (incl. an old one that already dismissed the finale overlay). */}
+      {game.sectorProgress.a02Unlocked && !game.sectorProgress.a02Entered && !sectorTransition && game.mission00.complete && (
+        <button className="sector-enter" type="button" onClick={enterSectorA02} title="Enter Sector A02">
+          ↳ ENTER SECTOR A02
+        </button>
+      )}
+
+      {/* Sector A01 → A02 cinematic transition (blackout · boot terminal · narrative · reveal) */}
+      {sectorTransition && <SectorTransition onEnter={onSectorA02Enter} onDone={onSectorA02Done} />}
+
+      {/* Dev Scan (V) — sector readout (current sector + the generated A02 grid stats) */}
+      {devScan && (
+        <div className="sector-dev">
+          SECTOR {game.sectorProgress.currentSector}
+          {game.sectorProgress.currentSector === 'A02'
+            ? ` // DEEP GRID · SEED ${(game.sectorProgress.a02Seed >>> 0).toString(16).toUpperCase()}` +
+              ` · NODES ${SECTOR_A02.net.positions.length / 3} · LINKS ${SECTOR_A02.net.edges.length}` +
+              ` · CLUSTERS ${A02_OPTS.clusterCount} · CAM R ${Math.round(SECTOR_A02.bounds.radius * 1.5)}` +
+              ` · GRID R ${Math.round(SECTOR_A02.bounds.radius)} · C [${SECTOR_A02.bounds.center.map((n) => Math.round(n)).join(',')}]`
+            : ` // MEMORY GRID · NODES ${SECTORS.A01.nodeCount} (MISSION ${SECTORS.A01.missionNodeCount} · FIELD ${SECTORS.A01.decoyNodeCount} ~60% YIELD / ~40% DECOY)` +
+              (game.sectorProgress.a02Unlocked ? ' · A02 ROUTE OPEN (enter a02)' : '')}
         </div>
       )}
     </>

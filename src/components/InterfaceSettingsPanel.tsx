@@ -129,6 +129,23 @@ export default function InterfaceSettingsPanel({
               </div>
             </div>
           ))}
+
+          {/* network connection lines / routes — fully shown or fully hidden (nodes always render) */}
+          <div className="ifx__row" key="showLinks">
+            <div className="ifx__copy">
+              <span className="ifx__label">NETWORK LINES</span>
+              <span className="ifx__desc">Show or fully hide all connection lines / routes.</span>
+            </div>
+            <div className="ifx__stepper">
+              <button type="button" onClick={() => onChange({ ...settings, showLinks: !settings.showLinks })} aria-label="Toggle network lines">
+                ‹
+              </button>
+              <span>{settings.showLinks ? 'SHOWN' : 'HIDDEN'}</span>
+              <button type="button" onClick={() => onChange({ ...settings, showLinks: !settings.showLinks })} aria-label="Toggle network lines">
+                ›
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="up__rule" />

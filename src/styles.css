@@ -1,18 +1,17 @@
 /* Neva Network — global + HUD styling. Pure monochrome, monospace, AR surveillance. */
 
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Chakra+Petch:wght@300;400;500;600&family=Orbitron:wght@400;500;600;700;800&display=swap');
-/* landing site (light premium theme) — clean modern sans pairing */
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;600;700;800&display=swap');
 
 :root {
   --wg-white: #ffffff;
-  --wg-dim: rgba(255, 255, 255, 0.86);
-  --wg-faint: rgba(255, 255, 255, 0.64);
-  --wg-ghost: rgba(255, 255, 255, 0.12);
-  --wg-line: rgba(255, 255, 255, 0.18);
+  --wg-dim: rgba(246, 250, 255, 0.96);
+  --wg-faint: rgba(226, 237, 248, 0.86);
+  --wg-ghost: rgba(255, 255, 255, 0.2);
+  --wg-line: rgba(255, 255, 255, 0.32);
   --wg-bg: #000000;
-  --wg-mono: 'Share Tech Mono', ui-monospace, 'SF Mono', monospace;
-  --wg-disp: 'Chakra Petch', var(--wg-mono);
+  --wg-ui: 'Atkinson Hyperlegible', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --wg-mono: var(--wg-ui);
+  --wg-disp: var(--wg-ui);
   --wg-space: 'Orbitron', var(--wg-disp);
 
   /* left-HUD functional tones — muted, low-saturation, glow-free. The world stays
@@ -31,18 +30,19 @@
   /* Interface readability settings (overridden from localStorage at runtime). */
   --ui-scale: 1;
   --text-scale: 1;
-  --panel-bg-alpha: 0.78;
-  --panel-bg-alpha-strong: 0.88;
-  --noise-opacity: 0.04;
-  --scanline-opacity: 0.5;
+  --panel-bg-alpha: 0.92;
+  --panel-bg-alpha-strong: 0.97;
+  --noise-opacity: 0.012;
+  --scanline-opacity: 0.16;
   /* Node Info / Node Inspection readability layer — the holographic frame keeps its scanline
      atmosphere, but it is held BEHIND the text (never striping labels/values), and the text
      gets clean, high-contrast tones + a tight dark backing shadow (no glow, no blur). */
   --panel-text-main: rgba(255, 255, 255, 0.98);
-  --panel-text-muted: rgba(255, 255, 255, 0.7);
-  --panel-row-bg: rgba(0, 0, 0, 0.26);
-  --panel-noise-opacity: 0.16;
-  --panel-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --panel-text-muted: rgba(228, 238, 248, 0.9);
+  --panel-row-bg: rgba(0, 0, 0, 0.46);
+  --panel-noise-opacity: 0.055;
+  --panel-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.96), 0 0 1px rgba(0, 0, 0, 1);
+  --readable-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 1px rgba(0, 0, 0, 1);
   --hud-density-gap: 0px;
   --hud-density-pad: 1;
   --hud-density-line: 1.5;
@@ -91,9 +91,18 @@ body,
 
 body {
   color: var(--wg-white);
-  font-family: var(--wg-mono);
-  -webkit-font-smoothing: antialiased;
+  font-family: var(--wg-ui);
+  font-weight: 500;
+  -webkit-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
   cursor: crosshair;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 #root {
@@ -288,6 +297,10 @@ canvas {
   text-align: center;
   z-index: 12;
 }
+/* active gameplay: the big title is hidden, so the command bar is the only lockup content —
+   sit it just under the top status bar (no title-block offset) so it doesn't read as a title screen. */
+.hud__brand--bare { top: 60px; }
+.hud__brand--bare .hud__actions { margin-top: 0; }
 
 .hud__brand-title {
   font-family: var(--wg-space);
@@ -428,6 +441,48 @@ canvas {
   border-radius: 2px;
   padding: 2px 4px;
 }
+
+/* compact global icon buttons (settings / fullscreen), docked top-right under the status bar */
+.hud__quickbtns {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  z-index: 16;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.hud__iconbtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--wg-dim);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--wg-line);
+  border-radius: 2px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.hud__iconbtn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.18);
+}
+.hud__iconbtn:active { background: rgba(255, 255, 255, 0.16); }
+.hud__iconbtn.is-active {
+  color: #fff;
+  border-color: rgba(150, 210, 220, 0.7);
+  background: rgba(40, 100, 104, 0.16);
+  box-shadow: 0 0 12px rgba(120, 200, 210, 0.18);
+}
+.hud__iconbtn .hud-ico { opacity: 0.9; }
+.is-touch .hud__quickbtns { top: 44px; right: 12px; }
 
 @keyframes brand-breathe {
   0%, 100% { text-shadow: 0 0 4px rgba(255,255,255,0.5), 0 0 16px rgba(255,255,255,0.3), 0 0 40px rgba(170,200,255,0.22); }
@@ -1049,8 +1104,8 @@ canvas {
    Each word is a <span class="tw"> with an incremental animation-delay set inline (see
    ExplorerHud). Runs once on mount/refresh. ── */
 @keyframes hud-tw {
-  from { opacity: 0; transform: translate(-4px, 1px); filter: blur(2px); }
-  to { opacity: 1; transform: none; filter: blur(0); }
+  from { opacity: 0; transform: translate(-4px, 1px); filter: none; }
+  to { opacity: 1; transform: none; filter: none; }
 }
 .tw, .tw--v { display: inline-block; opacity: 0; animation: hud-tw 0.34s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
 @media (prefers-reduced-motion: reduce) {
@@ -1376,25 +1431,26 @@ canvas {
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--wg-mono);
-  font-size: 10px;
-  letter-spacing: 0.34em;
+  font-size: 12.5px;
+  letter-spacing: 0.4em;
   text-transform: uppercase;
-  color: var(--wg-white);
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
-  animation: hud-blink 0.9s steps(1) infinite;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.6), 0 0 22px rgba(236, 196, 150, 0.4);
+  animation: hud-blink 0.7s steps(1) infinite;
   pointer-events: none;
 }
-/* a faint edge bloom that breathes during the pulse (no full-screen flash) */
+/* edge bloom that breathes during the pulse — ~2× stronger so a live pulse is clearly felt, with a
+   faint warm caution tint (muted, no neon). Still an inset vignette, not a full-screen white flash. */
 .hud__signal-edge {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 120px rgba(255, 255, 255, 0.06);
-  animation: signal-breathe 1.6s ease-in-out infinite;
+  box-shadow: inset 0 0 200px rgba(255, 255, 255, 0.14), inset 0 0 80px rgba(236, 196, 150, 0.09);
+  animation: signal-breathe 1.4s ease-in-out infinite;
 }
 @keyframes signal-breathe {
-  0%, 100% { box-shadow: inset 0 0 90px rgba(255, 255, 255, 0.04); }
-  50% { box-shadow: inset 0 0 150px rgba(255, 255, 255, 0.1); }
+  0%, 100% { box-shadow: inset 0 0 150px rgba(255, 255, 255, 0.1), inset 0 0 60px rgba(236, 196, 150, 0.06); }
+  50% { box-shadow: inset 0 0 300px rgba(255, 255, 255, 0.26), inset 0 0 120px rgba(236, 196, 150, 0.16); }
 }
 /* SIGNAL chip in the top bar (Mission 03) */
 .hud__chip--signal.is-pulse b { color: #fff; animation: hud-blink 0.9s steps(1) infinite; }
@@ -1418,9 +1474,11 @@ canvas {
   animation: dev-notice 1.9s ease-out forwards;
   pointer-events: none;
 }
-/* THREAT tier-rise flash — sits just under the pulse flash, toned amber/red for warning contrast */
+/* THREAT tier-rise flash — toned amber/red for warning contrast. Pushed below the brand lockup
+   (incl. the action bar) and below the persistent TRACE LOCK IMMINENT warning so the two never
+   overlap each other or the centred NEVA NETWORK wordmark when trace is high. */
 .hud__signal-flash--risk {
-  top: 140px;
+  top: 234px;
   color: var(--hud-amber);
   text-shadow: 0 0 10px rgba(212, 178, 120, 0.4);
 }
@@ -1520,16 +1578,33 @@ canvas {
   animation: sector-pulse 3.6s ease-in-out infinite;
 }
 @keyframes sector-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
-/* name + sector/layer sit beside each other on one line */
-.hud__loc { display: flex; flex-direction: row; align-items: baseline; gap: 11px; }
-.hud__loc-name {
+/* compact gameplay logo beside the functional sector line, on one aligned row (top-left HUD identity) */
+.hud__loc { display: flex; flex-direction: row; align-items: baseline; gap: 13px; min-width: 0; }
+.hud__logo {
   font-family: var(--wg-space);
-  font-size: 13px;
-  letter-spacing: 0.16em;
-  color: #e2f2ff;
-  text-shadow: 0 0 9px rgba(140, 200, 255, 0.5);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0.36em; /* wide but compact — a HUD identity, not a title screen */
+  padding-left: 0.36em; /* re-center against trailing letter-spacing */
+  text-transform: uppercase;
+  /* same segmented holo fill as the cinematic title, scaled down (finer 2px/3px slice bands) */
+  color: #eaf4ff;
+  background: repeating-linear-gradient(180deg, #ffffff 0, #ffffff 2px, rgba(255, 255, 255, 0.42) 2px, rgba(255, 255, 255, 0.42) 3px);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.45), 0 0 16px rgba(150, 195, 255, 0.22);
 }
-.hud__loc-grid { font-size: 10px; letter-spacing: 0.16em; color: rgba(255, 255, 255, 0.7); }
+.hud__loc-grid {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: rgba(150, 200, 220, 0.62); /* muted teal-ice — functional context, no strong glow */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 46vw;
+}
 .hud__led { width: 7px; height: 7px; border-radius: 50%; }
 .hud__led--ok { background: #4be08c; box-shadow: 0 0 9px #4be08c; animation: hud-blink 1.9s steps(1) infinite; }
 
@@ -1597,7 +1672,10 @@ canvas {
 /* trace >=90 imminent warning */
 .hud__trace-warn {
   position: absolute;
-  top: 96px;
+  /* sits BELOW the whole centred brand lockup — NEVA NETWORK title + subtitle + tagline + light
+     line + the SETTINGS/FULLSCREEN action bar (which ends ~188px) — so the high-trace warning
+     never overlaps the wordmark or the action buttons. */
+  top: 210px;
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--wg-mono);
@@ -2820,7 +2898,7 @@ canvas {
 @media (prefers-reduced-motion: reduce) {
   .up::before, .up__inner,
   .up--closing::before, .up--closing .up__inner,
-  .up__scan, .up__head, .up__rule, .up__res, .up__res--spend, .up__grid .up__item, .up__foot {
+  .up__scan, .up__head, .up__rule, .up__res, .up__res--spend, .up__layout, .up__grid .up__item, .up__foot {
     animation: none; opacity: 1; transform: none;
   }
   .up__corner, .up--closing .up__corner { animation: none; opacity: 0.9; }
@@ -3051,6 +3129,400 @@ canvas {
 .up__msg--fail { color: rgba(225, 150, 150, 0.95); }
 .up__msg--idle { color: var(--wg-faint); }
 .up__hint { font-size: 8.5px; letter-spacing: 0.24em; color: var(--wg-faint); text-transform: uppercase; white-space: nowrap; }
+
+/* Upgrade panel v2: simpler command surface with a status rail and a compact module stack. */
+.up--upgrade {
+  width: min(92vw, 1060px);
+  max-height: min(88vh, 760px);
+}
+.up--upgrade::before {
+  background:
+    linear-gradient(135deg, rgba(10, 16, 21, 0.94), rgba(2, 5, 8, 0.9)),
+    radial-gradient(circle at 18% 8%, rgba(150, 196, 220, 0.08), transparent 30%);
+  border-radius: 8px;
+  border-color: rgba(215, 230, 242, 0.34);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.72),
+    0 0 34px var(--up-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 44px rgba(150, 196, 220, 0.035);
+}
+.up--upgrade .up__inner {
+  max-height: inherit;
+  padding: clamp(18px, 2.2vw, 26px);
+}
+.up--upgrade .up__scan {
+  opacity: 0.16;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.026) 0,
+      rgba(255, 255, 255, 0.026) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+}
+.up__head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+.up__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  color: var(--hud-green);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.up__state.is-warn { color: var(--hud-amber); border-color: rgba(212, 178, 120, 0.36); }
+.up__state.is-crit { color: var(--hud-red); border-color: rgba(228, 150, 150, 0.38); }
+.up--upgrade .up__rule {
+  margin: 13px 0 16px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.08), transparent);
+}
+.up__layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  animation: np-row-in 0.34s ease-out 0.39s both;
+}
+.up__side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.016)),
+    rgba(0, 0, 0, 0.18);
+}
+.up__trace {
+  position: relative;
+  width: 124px;
+  aspect-ratio: 1;
+  margin: 0 auto 2px;
+  display: grid;
+  place-items: center;
+}
+.up__trace-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    conic-gradient(var(--up-edge) calc(var(--p, 0) * 1%), rgba(255, 255, 255, 0.08) 0),
+    radial-gradient(circle, rgba(255, 255, 255, 0.09), transparent 66%);
+  -webkit-mask: radial-gradient(closest-side, transparent 64%, #000 65%);
+          mask: radial-gradient(closest-side, transparent 64%, #000 65%);
+  filter: drop-shadow(0 0 12px var(--up-glow));
+}
+.up__trace-core {
+  position: relative;
+  width: 84px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+}
+.up__trace-core b {
+  font-family: var(--wg-disp);
+  font-size: 23px;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.up__trace-core i {
+  font-style: normal;
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  color: var(--wg-faint);
+}
+.up__install {
+  display: grid;
+  gap: 8px;
+}
+.up__install-row,
+.up__access,
+.up__resource {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.up__install-row span,
+.up__access span,
+.up__resource span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--wg-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+.up__install-row b,
+.up__access b,
+.up__resource b {
+  color: #fff;
+  font-family: var(--wg-disp);
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.up__bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.up__bar span {
+  display: block;
+  height: 100%;
+  min-width: 5px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.68), var(--up-edge));
+  box-shadow: 0 0 12px var(--up-glow);
+}
+.up__access {
+  padding: 9px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.up__access i,
+.up__resource i {
+  grid-column: 1 / -1;
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 7.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.up__resources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.up__main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.up--upgrade .up__section-h {
+  margin: 1px 0 10px;
+  padding: 0 2px;
+}
+.up--upgrade .up__grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 1px 4px 1px 1px;
+  margin-top: 0;
+}
+.up--upgrade .up__item {
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.044), rgba(255, 255, 255, 0.016)),
+    rgba(0, 0, 0, 0.14);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.2);
+}
+.up--upgrade .up__item:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.022)),
+    rgba(0, 0, 0, 0.18);
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.46), 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+.up--upgrade .up__item.is-afford {
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 3px 0 0 var(--up-edge);
+}
+.up--upgrade .up__item.is-max {
+  opacity: 0.66;
+}
+.up__item-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.up__glyph {
+  width: 40px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.88);
+}
+.up__item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.up--upgrade .up__item-top {
+  min-width: 0;
+}
+.up--upgrade .up__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  letter-spacing: 0.13em;
+}
+.up__level {
+  flex: none;
+  color: var(--wg-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.17em;
+  white-space: nowrap;
+}
+.up__effect {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.up__effect span,
+.up__effect b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.up__effect span { color: var(--wg-faint); }
+.up__effect b { color: #fff; text-align: right; }
+.up--upgrade .up__item-bot {
+  min-width: 168px;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 0;
+}
+.up--upgrade .up__chips {
+  justify-content: flex-end;
+  max-width: 150px;
+}
+.up--upgrade .up__chip {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.up--upgrade .up__buy {
+  min-width: 86px;
+  min-height: 31px;
+  border-radius: 7px;
+  padding: 7px 12px;
+  letter-spacing: 0.16em;
+}
+.up--upgrade .up__buy.is-afford {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.up--upgrade .up__maxtag {
+  white-space: nowrap;
+  color: var(--wg-faint);
+}
+.up--upgrade .up__foot {
+  margin-top: 0;
+}
+
+@media (max-width: 880px) {
+  .up--upgrade {
+    width: min(94vw, 760px);
+  }
+  .up__layout {
+    grid-template-columns: 1fr;
+  }
+  .up__side {
+    display: grid;
+    grid-template-columns: 128px 1fr;
+    align-items: center;
+  }
+  .up__trace {
+    width: 112px;
+    grid-row: 1 / span 3;
+  }
+  .up__trace-core {
+    width: 78px;
+  }
+  .up__trace-core b {
+    font-size: 21px;
+  }
+  .up__resources {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .up--upgrade .up__head {
+    gap: 12px;
+  }
+  .up__head-right {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .up__state {
+    min-height: 21px;
+    padding: 0 8px;
+  }
+  .up__side {
+    display: flex;
+  }
+  .up__resources {
+    grid-template-columns: 1fr;
+  }
+  .up--upgrade .up__item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .up--upgrade .up__item-bot {
+    min-width: 0;
+    justify-content: space-between;
+  }
+  .up__effect {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .up__effect b {
+    text-align: left;
+  }
+}
 
 /* ============================ NEVA TERMINAL (Space) ============================ */
 .term {
@@ -3373,7 +3845,8 @@ canvas {
 .ni__intro { animation: np-row-in 0.34s ease-out 0.6s both; }
 .ni__intro .ni__purpose { animation: none; }
 /* CORE-secured milestone flash (Mission 07) — bright/cool, distinct from the amber risk flash */
-.hud__signal-flash--core { color: #fff; text-shadow: 0 0 12px rgba(150, 230, 255, 0.6); }
+/* core-secured flash — own row, below the brand lockup + trace/risk warnings (no overlap with the wordmark) */
+.hud__signal-flash--core { top: 258px; color: #fff; text-shadow: 0 0 12px rgba(150, 230, 255, 0.6); }
 /* Stage 8: an installed module's ACTIVE badge breathes subtly so it reads as live */
 .up__status.is-on { animation: psn-active-pulse 2.4s ease-in-out infinite; }
 @keyframes psn-active-pulse { 0%, 100% { opacity: 0.82; } 50% { opacity: 1; } }
@@ -3565,7 +4038,7 @@ canvas {
 .hud__mission-id { font-size: var(--fs-115); }
 .hud__chapter,
 .hud__status-badge { font-size: var(--fs-85); }
-.hud__loc-name { font-size: var(--fs-13); }
+.hud__logo { font-size: var(--fs-13); }
 .hud__loc-grid { font-size: var(--fs-10); }
 .hud__chip { font-size: var(--fs-11); }
 .hud__chip-k { font-size: var(--fs-95); }
@@ -4293,9 +4766,8 @@ canvas {
     radial-gradient(ellipse at center, transparent 44%, rgba(0, 6, 12, 0.64) 100%),
     radial-gradient(ellipse at center, transparent 58%, rgba(40, 92, 122, 0.05) 100%);
 }
-.hud[data-sector='A02'] .hud__loc-name {
-  color: rgba(188, 222, 240, 0.96);
-  text-shadow: 0 0 8px rgba(120, 180, 210, 0.3);
+.hud[data-sector='A02'] .hud__loc-grid {
+  color: rgba(150, 205, 225, 0.82); /* A02 deeper-sector cue on the functional sector line */
 }
 
 /* --- Mission 00 intro: quieter background behind the tutorial so the first signal reads clean. --- */
@@ -4350,6 +4822,24 @@ canvas {
 }
 @media (prefers-reduced-motion: reduce) { .core-sweep { display: none; } }
 
+/* --- Depth-dive warp flash (Visual Upgrade Pass v2): a brief radial impulse on ENTER_SUBNETWORK,
+   pairing with the in-world route convergence + the DEPTH 0N ACCESSED overlay. ~0.76s, cheap
+   (opacity/transform only), pointer-events none, clear centre so the dive reads through it. --- */
+.fx-dive {
+  position: absolute;
+  inset: 0;
+  z-index: 31;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 30%, rgba(150, 200, 235, 0.12) 62%, rgba(120, 180, 220, 0.22));
+  animation: fx-dive 0.76s ease-out both;
+}
+@keyframes fx-dive {
+  0% { opacity: 0; transform: scale(1.18); }
+  26% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.94); }
+}
+@media (prefers-reduced-motion: reduce) { .fx-dive { display: none; } }
+
 /* --- Mission 20 finale: make the ending feel premium without a new scene — a stronger title glow,
    a calm "online" frame on the box, and a brighter brand. Builds on the existing .mx overlay. --- */
 .mx--finale .mx__box {
@@ -4372,6 +4862,93 @@ canvas {
    NEVA Core Assistant v1 — advisory hint launcher + panel (Phase: AI Integration). Monochrome AR,
    compact, bottom-right; never a chat app. Advisory only — no gameplay effect.
    ============================================================================================ */
+/* VISUAL MODE toggle/readout (K) — small NEVA chip above the launcher stack. Dim when CLASSIC,
+   ice-accented when ENHANCED, so the active mode reads at a glance. */
+.visual-mode {
+  position: absolute;
+  right: 16px;
+  bottom: 134px;
+  z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  appearance: none;
+  font-family: var(--wg-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--wg-faint);
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--wg-ghost);
+  border-left: 1px solid var(--wg-ghost);
+  border-radius: 2px;
+  padding: 6px 10px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: color 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.visual-mode.is-enhanced {
+  color: rgba(190, 224, 255, 0.95);
+  border-left-color: rgba(150, 210, 220, 0.7);
+  box-shadow: 0 0 14px rgba(120, 200, 210, 0.16);
+}
+.visual-mode:hover { color: #fff; border-color: rgba(150, 210, 220, 0.7); }
+.visual-mode kbd {
+  font: inherit;
+  font-size: 8px;
+  padding: 1px 4px;
+  border: 1px solid var(--wg-ghost);
+  color: inherit;
+}
+.is-touch .visual-mode { bottom: 160px; }
+
+/* persistent ENTER SECTOR A02 affordance — bottom-centre chip, ice-accented (A01 complete, not entered).
+   Bottom-centre keeps it clear of the brand (top), the side launchers, and the comb ruler. */
+.sector-enter {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  appearance: none;
+  font-family: var(--wg-mono);
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #061013;
+  background: rgba(150, 210, 220, 0.9);
+  border: 1px solid rgba(180, 230, 240, 0.9);
+  border-radius: 2px;
+  padding: 8px 16px;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(120, 200, 210, 0.3);
+  animation: sector-enter-breathe 3.2s ease-in-out infinite;
+}
+.sector-enter:hover { background: #fff; border-color: #fff; }
+@keyframes sector-enter-breathe {
+  0%, 100% { box-shadow: 0 0 18px rgba(120, 200, 210, 0.26); }
+  50% { box-shadow: 0 0 30px rgba(140, 215, 225, 0.42); }
+}
+@media (prefers-reduced-motion: reduce) { .sector-enter { animation: none; } }
+
+/* Dev Scan (V) — sector readout chip (dev only; sits above the EXIT button) */
+.sector-dev {
+  position: absolute;
+  left: 24px;
+  bottom: 54px;
+  z-index: 15;
+  font-family: var(--wg-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(150, 210, 220, 0.7);
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--wg-ghost);
+  padding: 4px 9px;
+  pointer-events: none;
+}
+
 .neva-launch {
   position: absolute;
   right: 16px;
@@ -4618,3 +5195,190 @@ canvas {
   .pt__list { max-height: 26vh; }
 }
 .is-touch .pt { top: 60px; right: 12px; }
+
+/* ============================================================================================
+   Readability pass — clear text for weak eyesight.
+   The sci-fi frame stays, but labels use a heavier accessible font, stronger contrast, tighter
+   spacing, darker panels, and quieter interference layers.
+   ============================================================================================ */
+.hud :is(
+  .hud__section-h,
+  .hud__section-r,
+  .hud__stat,
+  .hud__stat-k,
+  .hud__status-badge,
+  .hud__res-h,
+  .hud__res-note,
+  .hud__devkey,
+  .hud__mission,
+  .hud__chapter,
+  .hud__mission-id,
+  .hud__mission-name,
+  .hud__mission-state,
+  .hud__mission-done,
+  .hud__objective,
+  .hud__obj-label,
+  .hud__obj-text,
+  .hud__obj-guide-text,
+  .hud__obj-focus,
+  .hud__grid-tip,
+  .hud__tasks-h,
+  .hud__task,
+  .hud__task-n,
+  .hud__chip,
+  .hud__chip-k,
+  .hud__loc-grid,
+  .hud__act,
+  .hud__intro,
+  .hud__coords-text
+),
+.np__frame :is(
+  .np__name,
+  .np__sub,
+  .np__row,
+  .np__k,
+  .np__v,
+  .np__hint,
+  .np__pulse,
+  .np__msg,
+  .np__gateway-t,
+  .np__gateway-s,
+  .np__gateway-c,
+  .np__yield-h,
+  .np__yield-row,
+  .np__req-h,
+  .np__req-step,
+  .np__req-cost,
+  .np__req-risk,
+  .np__req-why,
+  .np__resact-h,
+  .np__resact-btn,
+  .np__btn,
+  .np__close,
+  .np__enter,
+  .np__act-keys,
+  .np__corrupt-hint,
+  .np__core-hint
+),
+.ni .np__frame :is(.ni__seg, .ni__flag, .ni__purpose, .ni__intro-role, .ni__intro-note, .ni__objective-badge, .ni__objective-label, .ni__objective-act-k, .ni__objective-act-v),
+.up :is(.up__title, .up__sub, .up__x, .up__res, .up__stat-k, .up__stat-v, .up__stat-sub, .up__section-h, .up__name, .up__status, .up__sub-line, .up__cur, .up__next, .up__tagline, .up__lvlrow, .up__chip, .up__maxtag, .up__buy, .up__msg, .up__hint),
+.term :is(.term__bar, .term__title, .term__x, .term__pin, .term__body, .term__line, .term__ps, .term__input),
+.ifx :is(.up__title, .up__sub, .up__x, .ifx__label, .ifx__desc, .ifx__stepper, .ifx__reset, .up__hint),
+.mx :is(.mx__brand, .mx__title, .mx__sub, .mx__label, .mx__list, .mx__go, .mx__alt),
+.m0 :is(.m0__head, .m0__role, .m0__obj, .m0__lines, .m0__msg, .m0__do, .m0__step-tag),
+.neva :is(.neva__name, .neva__sub, .neva__text, .neva__thinking, .neva__mode, .neva__foot),
+.pt :is(.pt__name, .pt__sub, .pt__row, .pt__qbtn, .pt__select, .pt__input, .pt__empty, .pt__cat, .pt__time, .pt__note-ctx, .pt__note-msg, .pt__count, .pt__note-foot),
+.tag__box,
+.dev-tag,
+.psn-mod,
+.scan-mark__kind,
+.visual-mode,
+.sector-enter,
+.sector-dev,
+.neva-launch,
+.pf-launch,
+.subnet-toast,
+.transition-hint {
+  font-family: var(--wg-ui);
+  font-weight: 600;
+  text-shadow: var(--readable-text-shadow);
+}
+
+.hud :is(.hud__stat, .hud__task, .hud__objective, .hud__obj-guide-text, .hud__grid-tip, .hud__loc-grid),
+.np__frame :is(.np__row, .np__hint, .np__pulse, .np__msg, .np__yield-row, .np__req-step, .np__req-cost, .np__req-risk, .np__req-why, .np__resact-btn),
+.term :is(.term__body, .term__input),
+.neva .neva__text,
+.pt :is(.pt__row, .pt__note-msg) {
+  letter-spacing: 0.04em;
+}
+
+.hud :is(.hud__section-h, .hud__mission-id, .hud__mission-name, .hud__mission-state, .hud__tasks-h, .hud__chapter, .hud__chip-k, .hud__act),
+.np__frame :is(.np__name, .np__sub, .np__btn, .np__close, .np__enter, .np__gateway-t, .np__yield-h, .np__resact-h),
+.up :is(.up__title, .up__sub, .up__section-h, .up__name, .up__buy, .up__hint),
+.ifx :is(.ifx__label, .ifx__stepper span, .ifx__reset),
+.mx :is(.mx__title, .mx__sub, .mx__label, .mx__list, .mx__go, .mx__alt),
+.m0 :is(.m0__head, .m0__role, .m0__obj, .m0__do),
+.neva :is(.neva__name, .neva__sub, .neva__mode),
+.pt :is(.pt__name, .pt__sub, .pt__qbtn, .pt__cat) {
+  letter-spacing: 0.1em;
+}
+
+.hud :is(.hud__stat, .hud__task, .hud__mission-name, .hud__obj-label, .hud__task-n, .hud__chapter, .hud__chip-k, .hud__loc-grid),
+.np__frame :is(.np__sub, .np__k, .np__hint, .np__yield-row, .np__req-n, .np__req-why, .np__act-keys),
+.ni .np__frame :is(.ni__seg, .ni__flag, .ni__purpose, .ni__intro-note),
+.up :is(.up__sub, .up__res, .up__stat-k, .up__stat-sub, .up__section-h, .up__status, .up__sub-line, .up__tagline, .up__lvlrow > span, .up__chip, .up__maxtag, .up__hint),
+.term :is(.term__bar, .term__line),
+.ifx :is(.ifx__desc, .up__hint),
+.mx :is(.mx__sub, .mx__label, .mx__list),
+.m0 :is(.m0__head, .m0__obj, .m0__what, .m0__why),
+.neva :is(.neva__sub, .neva__text--idle, .neva__foot),
+.pt :is(.pt__sub, .pt__row span, .pt__time, .pt__note-ctx, .pt__count, .pt__note-foot),
+.tag__box,
+.dev-tag,
+.psn-mod {
+  color: var(--wg-dim);
+}
+
+.hud :is(.hud__stat b, .hud__chip b, .hud__obj-text, .hud__task.is-done, .hud__mission-id, .hud__tasks-count),
+.np__frame :is(.np__v, .np__name, .np__btn, .np__gateway-t, .np__yield-h, .np__yield-row b, .np__resact-btn),
+.up :is(.up__title, .up__name, .up__stat-v, .up__lvlrow > b, .up__buy.is-afford, .up__msg),
+.term :is(.term__title, .term__line.is-echo, .term__line.is-out, .term__input),
+.ifx :is(.ifx__label, .ifx__stepper span),
+.mx :is(.mx__brand, .mx__title, .mx__go),
+.m0 :is(.m0__role, .m0__remember, .m0__do),
+.neva :is(.neva__name, .neva__text),
+.pt :is(.pt__name, .pt__row b, .pt__cat, .pt__note-msg) {
+  color: #fff;
+  font-weight: 700;
+}
+
+.hud__section,
+.hud__mission,
+.tag__box,
+.dev-tag,
+.psn-mod,
+.m0__bar,
+.neva,
+.pt {
+  background-color: rgba(0, 0, 0, 0.72);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.hud__noise,
+.hud__scanlines,
+.np__scan,
+.up__scan,
+.lp__bg::after {
+  mix-blend-mode: normal;
+}
+
+.np__scan,
+.up__scan {
+  opacity: 0.06;
+}
+
+.hud__brand-sub,
+.hud__brand-micro,
+.hud__loc-grid,
+.hud__chapter {
+  text-shadow: var(--readable-text-shadow);
+}
+
+.hud__brand-title,
+.hud__logo,
+.ifx-modal__paused,
+.mx__brand,
+.mx__title {
+  color: #fff;
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 1), 0 0 10px rgba(180, 220, 255, 0.35);
+}
+
+@media (min-width: 900px) {
+  .m0 {
+    left: max(300px, 22vw);
+  }
+}

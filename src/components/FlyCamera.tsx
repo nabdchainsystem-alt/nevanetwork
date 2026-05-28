@@ -22,12 +22,17 @@ interface Props {
   depth: number; // current depth — selects which gateway set the locator tracks
   onFocusReadyChange?: (node: number | null) => void;
   guideNode?: number | null; // Mission 00: gently FRAME this node without selecting it (no panel)
+  enhanced?: boolean; // VISUAL MODE: ENHANCED composes the focused node left-of-centre; CLASSIC keeps it centred
+  overviewRadius?: number; // sector-aware overview standoff (A02 frames its larger grid; defaults to A01)
+  overviewHeight?: number;
+  flightSpeedScale?: number; // free-fly speed multiplier (A02 = 1.3 → ~30% faster across the bigger world)
 }
 
 const BASE_SPEED = 39;
 const BOOST = 3.1;
 const LOOK_SENS = 0.0022;
-const ARROW_LOOK = 1.6; // rad/s — arrow keys act like the mouse
+const ARROW_LOOK = 1.6; // rad/s — peak arrow-look turn speed
+const ARROW_ACCEL = 5.5; // how fast arrow-look velocity eases in/out (lower = smoother glide on press/release)
 const ACCEL_DAMP = 4.5;
 const DECEL_DAMP = 1.7;
 const LOOK_DAMP = 24;
@@ -47,6 +52,12 @@ const NODE_HEIGHT = 5; // camera height above the focused node
 const GUIDE_RADIUS = 30; // wider standoff when GUIDING (framing) a node — a calm frame, not a dive
 const CENTRE_LERP = 1.44; // how fast the orbit centre/radius ease to a new target (lower = smoother glide); +20% over 1.2 = a quicker dive to a node
 const FOCUS_PANEL_PROGRESS = 0.85; // open node panels once the focus glide is 85% complete
+// cinematic composition: while a node is focused (its Inspection Panel opens on the RIGHT), aim the
+// camera slightly to the node's right so the node sits LEFT-of-centre — visible between the Node
+// Info (left) and Inspection (right) panels instead of hidden behind the panel. Fraction of the
+// orbit radius; eased in/out, synced to the panel reveal. Subtle — never enough to lose the node.
+const COMPOSE_OFFSET = 0.22;
+const COMPOSE_LERP = 3.0; // how fast the composition offset eases in/out
 const FREE_RESUME = 1.0; // idle seconds after manual flight before orbit resumes
 // On deselect (click-away / R) the camera glides back to the overview with a smooth EASE-IN-OUT
 // over this many seconds. The slow start lets the inspection/info panels close in place; then it
@@ -61,7 +72,7 @@ const ORBIT_DRAG_SENS = 0.0072; // orbit-mode horizontal drag, rad per screen px
 const ORBIT_V_SENS = 0.16; // orbit-mode vertical drag, world units per screen px
 const PINCH_SENS = 0.5; // orbit-mode pinch, world units per px of finger-gap change
 const ORBIT_RADIUS_MIN = 12;
-const ORBIT_RADIUS_MAX = 340;
+const ORBIT_RADIUS_MAX = 760; // wheel/pinch zoom-out ceiling — covers the larger A02 overview standoff
 const ORBIT_HEIGHT_LIM = 160;
 
 // --- desktop mouse: wheel zoom + middle-button (wheel) drag to LOOK around (yaw/pitch) ---
@@ -96,6 +107,10 @@ const _ray = new THREE.Raycaster();
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _proj = new THREE.Vector3();
+// cinematic-composition temporaries (allocation-free) — used to aim slightly off the focused node
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _look = new THREE.Vector3();
 const PICK_TOL_PX = 38; // CSS-px catch radius for the CLICK/TAP-ONLY far-pick fallback
 
 /**
@@ -168,6 +183,10 @@ export default function FlyCamera({
   depth,
   onFocusReadyChange,
   guideNode,
+  enhanced = true,
+  overviewRadius = OVERVIEW_RADIUS,
+  overviewHeight = OVERVIEW_HEIGHT,
+  flightSpeedScale = 1,
 }: Props) {
   const { camera, gl } = useThree();
   const gateways = useMemo(() => gatewaysAtDepth(depth), [depth]);
@@ -178,8 +197,15 @@ export default function FlyCamera({
   const pitch = useRef(0);
   const targetYaw = useRef(0);
   const targetPitch = useRef(0);
+  const arrowYawVel = useRef(0); // eased arrow-look velocity (accelerates on press, glides to 0 on release)
+  const arrowPitchVel = useRef(0);
   const locked = useRef(false);
   const selectedRef = useRef<number | null>(selected);
+  const enhancedRef = useRef(enhanced); // VISUAL MODE — read in the frame loop for the composition offset
+  const ovRadius = useRef(overviewRadius); // sector-aware overview standoff (read in the frame loop)
+  const ovHeight = useRef(overviewHeight);
+  const flightSpeed = useRef(flightSpeedScale); // free-fly speed multiplier (read in the frame loop)
+  useEffect(() => { flightSpeed.current = flightSpeedScale; }, [flightSpeedScale]);
   const hoverRef = useRef<number | null>(null);
   const pointer = useRef(new THREE.Vector2(0, 0));
   const wheelLook = useRef(false); // middle (wheel) button held → drag to look around (head / eyes)
@@ -208,6 +234,7 @@ export default function FlyCamera({
   const focusStartH = useRef(OVERVIEW_HEIGHT);
   const focusStartTravel = useRef(1);
   const focusPanelProgress = useRef(FOCUS_PANEL_PROGRESS);
+  const compose = useRef(0); // 0 = aim dead-centre, 1 = node composed left-of-centre (panel open)
 
   const syncLook = () => {
     const e = _euler.setFromQuaternion(camera.quaternion, 'YXZ');
@@ -228,8 +255,8 @@ export default function FlyCamera({
 
   const aimOverview = () => {
     orbitCentreTgt.current.copy(_origin);
-    orbitRadiusTgt.current = OVERVIEW_RADIUS;
-    orbitHeightTgt.current = OVERVIEW_HEIGHT;
+    orbitRadiusTgt.current = ovRadius.current; // sector-aware (A02 frames its larger grid)
+    orbitHeightTgt.current = ovHeight.current;
   };
 
   const placeAtSpawn = () => {
@@ -253,6 +280,24 @@ export default function FlyCamera({
     placeAtSpawn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera]);
+
+  useEffect(() => {
+    enhancedRef.current = enhanced;
+  }, [enhanced]);
+
+  // Sector-aware overview framing. When the standoff changes (e.g. crossing into the larger A02 grid)
+  // and no node is focused, ease the overview out to the new radius/height — an establishing pull-back
+  // that frames the new grid instead of sitting inside it. R / deselect then return to THIS framing.
+  useEffect(() => {
+    ovRadius.current = overviewRadius;
+    ovHeight.current = overviewHeight;
+    if (selectedRef.current == null) {
+      orbitCentreTgt.current.copy(_origin);
+      orbitRadiusTgt.current = overviewRadius;
+      orbitHeightTgt.current = overviewHeight;
+      returning.current = false; // the steady CENTRE_LERP ease carries the pull-back smoothly
+    }
+  }, [overviewRadius, overviewHeight]);
 
   // selecting a node retargets the orbit to circle it; deselecting eases back to overview
   useEffect(() => {
@@ -697,10 +742,15 @@ export default function FlyCamera({
       wasFree.current = true;
       returning.current = false; // manual flight cancels the return glide
 
-      if (k['ArrowLeft']) targetYaw.current += ARROW_LOOK * delta;
-      if (k['ArrowRight']) targetYaw.current -= ARROW_LOOK * delta;
-      if (k['ArrowUp']) targetPitch.current += ARROW_LOOK * delta;
-      if (k['ArrowDown']) targetPitch.current -= ARROW_LOOK * delta;
+      // arrow "head" look — drive an EASED velocity (ramps up on press, glides to a stop on release)
+      // so it reads as smooth as the F mouse-look, not a hard constant-rate on/off turn.
+      const wantYaw = (k['ArrowLeft'] ? 1 : 0) - (k['ArrowRight'] ? 1 : 0);
+      const wantPitch = (k['ArrowUp'] ? 1 : 0) - (k['ArrowDown'] ? 1 : 0);
+      const av = 1 - Math.exp(-ARROW_ACCEL * delta);
+      arrowYawVel.current += (wantYaw * ARROW_LOOK - arrowYawVel.current) * av;
+      arrowPitchVel.current += (wantPitch * ARROW_LOOK - arrowPitchVel.current) * av;
+      targetYaw.current += arrowYawVel.current * delta;
+      targetPitch.current += arrowPitchVel.current * delta;
       // fly-mode drag-to-look (touch)
       if (ti.mode === 'fly') {
         targetYaw.current -= tLookX * TOUCH_LOOK_SENS;
@@ -736,7 +786,7 @@ export default function FlyCamera({
       }
 
       const boosting = k['ShiftLeft'] || k['ShiftRight'];
-      const speed = BASE_SPEED * (boosting ? BOOST : 1);
+      const speed = BASE_SPEED * (boosting ? BOOST : 1) * flightSpeed.current; // A02 flies ~30% faster
       const hasInput = desired.current.lengthSq() > 0;
       if (hasInput) desired.current.normalize().multiplyScalar(speed);
       const damp = hasInput ? ACCEL_DAMP : DECEL_DAMP;
@@ -761,7 +811,7 @@ export default function FlyCamera({
         // already looking at the new orbit centre. lookAt(centre) then equals their current
         // heading, so nothing snaps/spins — the gentle orbit just circles what they were viewing.
         camera.getWorldDirection(forward.current);
-        const R = clamp(camera.position.distanceTo(orbitCentre.current), NODE_RADIUS, OVERVIEW_RADIUS);
+        const R = clamp(camera.position.distanceTo(orbitCentre.current), NODE_RADIUS, ovRadius.current);
         orbitCentre.current.copy(camera.position).addScaledVector(forward.current, R);
         orbitCentreTgt.current.copy(orbitCentre.current); // hold here — don't drift back to the cloud centre
         const dx = camera.position.x - orbitCentre.current.x;
@@ -807,8 +857,8 @@ export default function FlyCamera({
       const p = Math.min(1, (t - returnT0.current) / RETURN_DUR);
       const e = p * p * (3 - 2 * p); // smoothstep — eases in AND out
       orbitCentre.current.lerpVectors(returnFromC.current, _origin, e);
-      orbitRadius.current = returnFromR.current + (OVERVIEW_RADIUS - returnFromR.current) * e;
-      orbitHeight.current = returnFromH.current + (OVERVIEW_HEIGHT - returnFromH.current) * e;
+      orbitRadius.current = returnFromR.current + (ovRadius.current - returnFromR.current) * e;
+      orbitHeight.current = returnFromH.current + (ovHeight.current - returnFromH.current) * e;
       if (p >= 1) returning.current = false;
     } else {
       // ease the orbit centre / radius / height toward their targets (the glide-in on select,
@@ -844,7 +894,21 @@ export default function FlyCamera({
       c.y + orbitHeight.current + Math.sin((t - bobT0.current) * 0.05) * 3,
       c.z + Math.sin(orbitAngle.current) * r,
     );
-    _lookM.lookAt(camera.position, c, _up);
+    // CINEMATIC COMPOSITION — ease the look-at toward a point slightly RIGHT of the focused node so
+    // the node settles LEFT-of-centre (clear of the right-side Inspection Panel). Engages only once
+    // the node is focused AND its panel has revealed, so the slide syncs with the panel entrance; it
+    // eases back to dead-centre on deselect. Does NOT affect picking (raycast uses the live cursor).
+    const composeTgt = enhancedRef.current && selectedRef.current != null && focusReadyNode.current === selectedRef.current ? 1 : 0;
+    compose.current += (composeTgt - compose.current) * (1 - Math.exp(-COMPOSE_LERP * delta));
+    if (compose.current > 0.001) {
+      _fwd.set(c.x - camera.position.x, c.y - camera.position.y, c.z - camera.position.z).normalize();
+      _right.crossVectors(_fwd, _up).normalize();
+      const off = r * COMPOSE_OFFSET * compose.current;
+      _look.set(c.x + _right.x * off, c.y + _right.y * off, c.z + _right.z * off);
+    } else {
+      _look.copy(c);
+    }
+    _lookM.lookAt(camera.position, _look, _up);
     _q.setFromRotationMatrix(_lookM);
     // Ease toward facing the centre, but never turn faster than MAX_TURN. The existing exp ease
     // smooths small corrections; the cap keeps a big swing (the "spins me fast" cases) to a steady,

@@ -14,18 +14,20 @@ export function createFadeLineMaterial(opts: {
   near?: [number, number];
   far?: [number, number];
   flicker?: number; // 0 = steady, 1 = strong shimmer
+  blending?: THREE.Blending; // default Normal; pass Additive for glowing edge frames
 }): THREE.ShaderMaterial {
   const {
     opacity = 0.3,
     near = [2.5, 18],
     far = [170, 330],
     flicker = 0,
+    blending = THREE.NormalBlending,
   } = opts;
 
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    blending: THREE.NormalBlending,
+    blending,
     toneMapped: false,
     uniforms: {
       uTime: { value: 0 },
@@ -97,6 +99,36 @@ export function patchNodeNearFade(
       .replace(
         '#include <dithering_fragment>',
         '#include <dithering_fragment>\ngl_FragColor.a *= smoothstep(uNodeNear.x, uNodeNear.y, vCamDist);',
+      );
+  };
+  material.needsUpdate = true;
+}
+
+/**
+ * Like {@link patchNodeNearFade} but ALSO fades nodes out by far distance — the depth pass that
+ * makes the network read as a deep 3D volume rather than a flat star map. Near nodes stay sharp;
+ * beyond `far[0]` they ramp toward invisible by `far[1]`, layering into the fog/void. Works on
+ * instanced MeshBasicMaterial (the per-instance transform is already folded into `mvPosition`).
+ */
+export function patchNodeDepthFade(
+  material: THREE.Material,
+  near: [number, number],
+  far: [number, number],
+) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uNodeNear = { value: new THREE.Vector2(near[0], near[1]) };
+    shader.uniforms.uNodeFar = { value: new THREE.Vector2(far[0], far[1]) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vCamDist;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvCamDist = -mvPosition.z;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform vec2 uNodeNear;\nuniform vec2 uNodeFar;\nvarying float vCamDist;',
+      )
+      .replace(
+        '#include <dithering_fragment>',
+        '#include <dithering_fragment>\ngl_FragColor.a *= smoothstep(uNodeNear.x, uNodeNear.y, vCamDist) * (1.0 - smoothstep(uNodeFar.x, uNodeFar.y, vCamDist));',
       );
   };
   material.needsUpdate = true;

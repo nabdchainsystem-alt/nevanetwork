@@ -1,0 +1,100 @@
+/* =====================================================================================
+   Sector A01 → A02 cinematic transition. Full blackout + a small glowing boot/terminal panel
+   running a typed narrative, then a fade-out to reveal the rebuilt HUD + forming A02 grid.
+   NEVA monochrome / teal-ice; subtle flicker, never arcade. Visual only.
+   ===================================================================================== */
+
+.sx {
+  position: fixed;
+  inset: 0;
+  z-index: 200; /* above every panel/overlay (.mx 50, panels 60) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  animation: sx-blackin 900ms ease both; /* fade the world to black (Step A) */
+}
+@keyframes sx-blackin { from { opacity: 0; } to { opacity: 1; } }
+
+/* fade the whole overlay out → reveal the rebuilt scene behind it (Step D) */
+.sx--fading { animation: sx-blackout 1150ms ease forwards; }
+@keyframes sx-blackout { from { opacity: 1; } to { opacity: 0; } }
+
+/* the small glowing center boot panel (Step B) */
+.sx__boot {
+  position: relative;
+  width: min(560px, 86vw);
+  min-height: 240px;
+  max-height: 70vh;
+  padding: 20px 24px;
+  background: rgba(6, 12, 14, 0.55);
+  border: 1px solid rgba(150, 210, 220, 0.22);
+  border-top: 1px solid rgba(150, 210, 220, 0.5);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7), inset 0 0 50px rgba(10, 30, 36, 0.35);
+  overflow: hidden;
+  animation: sx-boot-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both, sx-flicker 5.5s steps(1) 0.6s infinite;
+}
+@keyframes sx-boot-in {
+  from { opacity: 0; transform: translateY(6px) scaleY(0.7); }
+  to { opacity: 1; transform: none; }
+}
+/* very subtle, slow flicker — not arcade */
+@keyframes sx-flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.86; }
+  98.5% { opacity: 0.96; }
+}
+
+.sx__corner {
+  position: absolute;
+  width: 14px; height: 14px;
+  border: 1px solid rgba(160, 220, 230, 0.7);
+}
+.sx__corner--tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+.sx__corner--br { right: 0; bottom: 0; border-left: none; border-top: none; }
+
+/* a faint scan sweep across the panel */
+.sx__scan {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 30%;
+  background: linear-gradient(180deg, rgba(150, 210, 220, 0.07), transparent);
+  animation: sx-scan 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes sx-scan { 0% { transform: translateY(-30%); } 100% { transform: translateY(330%); } }
+
+.sx__lines {
+  position: relative;
+  font-family: var(--wg-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.14em;
+  color: rgba(196, 228, 234, 0.92);
+  text-shadow: 0 0 8px rgba(120, 200, 210, 0.25);
+}
+.sx__line { white-space: pre-wrap; }
+.sx__line--active { color: #eafaff; }
+.sx__cursor {
+  display: inline-block;
+  width: 7px; height: 13px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: rgba(180, 230, 240, 0.9);
+  box-shadow: 0 0 8px rgba(140, 220, 235, 0.6);
+  animation: sx-blink 0.9s steps(1) infinite;
+}
+@keyframes sx-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+.sx__hint {
+  position: absolute;
+  right: 16px; bottom: 12px;
+  font-family: var(--wg-mono, monospace);
+  font-size: 8px;
+  letter-spacing: 0.24em;
+  color: rgba(150, 200, 210, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sx, .sx--fading, .sx__boot, .sx__scan, .sx__cursor { animation-duration: 0.01ms; animation-iteration-count: 1; }
+}

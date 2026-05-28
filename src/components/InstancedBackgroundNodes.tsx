@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { NODE_COUNT, FIELD, WORLD_SEED, mulberry32 } from '../world';
 import { NETWORK } from '../network';
-import { patchNodeNearFade } from '../fadeMaterials';
+import { patchNodeDepthFade } from '../fadeMaterials';
 import type { BackgroundNoise } from '../uiSettings';
 
 const _m = new THREE.Matrix4();
@@ -29,9 +29,13 @@ interface Data {
 export default function InstancedBackgroundNodes({
   focused,
   backgroundNoise,
+  atmoOpacity = 1,
+  spread = 1,
 }: {
   focused: boolean;
   backgroundNoise: BackgroundNoise;
+  atmoOpacity?: number; // sector/depth dust presence (A01 calmer ~0.82 → A02 ~1.0; deeper thins) — eased
+  spread?: number; // world-scale multiplier — 1 = A01; A02 scales the whole star field (+ cube size + fade) up to fill its larger world
 }) {
   const ref = useRef<THREE.InstancedMesh>(null!);
   const dim = useRef(1);
@@ -43,13 +47,15 @@ export default function InstancedBackgroundNodes({
       opacity: 1,
       depthWrite: false,
     });
-    patchNodeNearFade(m, [1.5, 13]);
+    // near-fade keeps the lens clear; far-fade thins the deep halo. Both scale with `spread` so the
+    // A02 star field (a much larger world, viewed from farther out) still fades correctly.
+    patchNodeDepthFade(m, [1.5 * spread, 13 * spread], [210 * spread, 400 * spread]);
     return m;
-  }, []);
+  }, [spread]);
 
   const data = useMemo<Data>(() => {
     const rng = mulberry32(WORLD_SEED ^ 0xa7005);
-    const R = FIELD.radius;
+    const R = FIELD.radius * spread; // scaled world radius (A02 fills its larger space)
     const centers = NETWORK.centers;
     const nc = centers.length / 3;
     const g = () => rng() + rng() + rng() - 1.5;
@@ -66,10 +72,10 @@ export default function InstancedBackgroundNodes({
       let z: number;
       if (rng() < 0.72) {
         const c = (rng() * nc) | 0;
-        const spread = 26 + rng() * 34;
-        x = centers[c * 3] + g() * spread;
-        y = centers[c * 3 + 1] + g() * spread;
-        z = centers[c * 3 + 2] + g() * spread;
+        const clusterSpread = (26 + rng() * 34) * spread;
+        x = centers[c * 3] * spread + g() * clusterSpread;
+        y = centers[c * 3 + 1] * spread + g() * clusterSpread;
+        z = centers[c * 3 + 2] * spread + g() * clusterSpread;
       } else {
         const u = rng() * 2 - 1;
         const ang = rng() * Math.PI * 2;
@@ -88,12 +94,14 @@ export default function InstancedBackgroundNodes({
       const isFar = r2 > R * 0.85 * (R * 0.85);
       far[i] = isFar ? 1 : 0;
 
-      scales[i] = 0.04 + rng() * 0.085;
-      bright[i] = isFar ? 0.18 + rng() * 0.2 : 0.32 + rng() * 0.34;
+      // cube size scales with the world so dust still reads as glowing-cube "stars" from far out
+      scales[i] = (0.04 + rng() * 0.085) * spread;
+      // far dust dimmer than before → less background clutter, more depth separation (still present)
+      bright[i] = isFar ? 0.13 + rng() * 0.16 : 0.32 + rng() * 0.34;
       phase[i] = rng() * Math.PI * 2;
     }
     return { positions, scales, bright, phase, far };
-  }, []);
+  }, [spread]);
 
   useLayoutEffect(() => {
     const mesh = ref.current;
@@ -118,8 +126,13 @@ export default function InstancedBackgroundNodes({
     if (!mesh.instanceColor) return;
     const t = state.clock.elapsedTime;
     const noiseMul = backgroundNoise === 'Low' ? 0.45 : backgroundNoise === 'High' ? 1.18 : 1;
-    const target = (focused ? 0.4 : 1) * noiseMul;
+    const target = (focused ? 0.4 : 1) * noiseMul; // dust recedes on focus (declutter behind the panel)
     dim.current += (target - dim.current) * (1 - Math.exp(-4 * Math.min(rawDelta, 0.05)));
+    // sector/depth atmosphere: ease the whole dust field's presence (one global alpha) so A01 reads
+    // calmer/cleaner and A02 (and deeper) reads denser — smoothly, with no per-instance churn.
+    // (mutated via the mesh's material ref, not the memoized material value, to stay Compiler-safe)
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    mat.opacity += (atmoOpacity - mat.opacity) * (1 - Math.exp(-1.4 * Math.min(rawDelta, 0.05)));
 
     const BATCH = 320;
     for (let k = 0; k < BATCH; k++) {

@@ -12,6 +12,9 @@ import {
   IconTopologyStar,
   IconCamera,
   IconHome2,
+  IconSettings,
+  IconMaximize,
+  IconMinimize,
 } from '@tabler/icons-react';
 import HudIcon from './HudIcon';
 import { HUD_TONE, type TablerIconComp } from './hudTokens';
@@ -186,7 +189,8 @@ export default function ExplorerHud({
   // reusable objective guidance — the status-aware "what to do now" hint + FOCUS OBJECTIVE button
   // (only for missions with a single resolvable target; aggregate missions resolve to null).
   const objective2 = resolveObjectiveTarget(game, selected);
-  const showObjGuide = !game.locked && objective2 != null && objective2.status !== 'completed';
+  // no per-node objective guidance in Sector A02 yet (free-scan; future missions wire it)
+  const showObjGuide = !game.locked && game.sectorProgress.currentSector !== 'A02' && objective2 != null && objective2.status !== 'completed';
   // Phase 6 — a context-relevant Private Grid suggestion (advisory, no mechanic change).
   const tip = intro ? null : gridTip(game);
 
@@ -203,7 +207,6 @@ export default function ExplorerHud({
   const shownTasks = game.missionComplete ? tasks.map((t) => (t.warn ? t : { ...t, done: true })) : tasks;
   const tasksDone = shownTasks.filter((t) => t.done).length;
   const missionState = game.missionComplete ? 'COMPLETE' : 'ACTIVE';
-
   // THREAT tier-rise feedback — a brief "RISK RISING · <TIER>" flash when the network gets hotter
   const THREAT_RANK = { STABLE: 0, WATCHED: 1, TRACED: 2, CRITICAL: 3 } as const;
   const [riskFx, setRiskFx] = useState<string | null>(null);
@@ -328,10 +331,13 @@ export default function ExplorerHud({
 
   // ---- top status bar: system health/data + the section you're currently in ----
   const ts = now / 1000;
-  // Phase 4 — the SECTOR now reflects the arc: Memory Grid (A01, missions 00–07) → Deep Network
-  // (A02, missions 08–20). Drives the top-bar label + the `data-sector` visual-identity class.
-  const sectorId = game.missionId >= 8 ? 'A02' : 'A01';
-  const sectorName = game.missionId >= 8 ? 'DEEP NETWORK' : 'MEMORY GRID';
+  // Sector label. Missions 00–20 ARE Sector A01 (Memory Grid → its Deep Network chapter at M08+);
+  // the NEW procedural grid is Sector A02 (Deep Grid), entered after Mission 20. The vignette
+  // `data-sector` keeps the heavier look for both late-A01 and the new A02 (A02 CSS), light for early A01.
+  const inA02 = game.sectorProgress.currentSector === 'A02';
+  const sectorId = inA02 ? 'A02' : 'A01';
+  const sectorName = inA02 ? 'DEEP GRID' : game.missionId >= 8 ? 'DEEP NETWORK' : 'MEMORY GRID';
+  const vignetteSector = inA02 || game.missionId >= 8 ? 'A02' : 'A01';
   const grid = `${sec(telemetry.x)}-${sec(telemetry.y)}-${sec(telemetry.z)}`;
   const integrity = Math.max(0, 100 - tr);
   const integHue = integrity > 66 ? 'ok' : integrity > 33 ? 'warn' : 'crit';
@@ -357,7 +363,7 @@ export default function ExplorerHud({
   const atM = () => 0.2 + _m++ * LINE_STEP;
 
   return (
-    <div className={`hud${intro ? ' is-intro' : ''}`} data-sector={sectorId}>
+    <div className={`hud${intro ? ' is-intro' : ''}`} data-sector={vignetteSector}>
       <div className="hud__noise" />
       <div className="hud__scanlines" />
       <div className="hud__vignette" />
@@ -379,9 +385,11 @@ export default function ExplorerHud({
             </svg>
           </span>
           <div className="hud__loc">
-            <span className="hud__loc-name">SECTOR {sectorId}</span>
+            {/* compact gameplay logo (top-left HUD identity) — the segmented cinematic title,
+                scaled down. The big centered title is reserved for cinematic/menu states. */}
+            <span className="hud__logo">NEVA NETWORK</span>
             <span className="hud__loc-grid">
-              {sectorName} · GRID {grid}
+              SECTOR {sectorId} · {sectorName} · GRID {grid}
             </span>
           </div>
           <span className="hud__led hud__led--ok" title="UPLINK ONLINE" />
@@ -415,28 +423,42 @@ export default function ExplorerHud({
         </div>
       </div>
 
-      {/* top-center brand: space-font wordmark, glowing light line, action bar */}
-      <header className={`hud__brand${pulse ? ' is-pulse' : ''}${game.pulseActive ? ' is-pulse-hide' : ''}`}>
-        <h1 className="hud__brand-title">NEVA NETWORK</h1>
-        <div className="hud__brand-sub">BREACH THE MEMORY GRID</div>
-        <div className="hud__brand-micro">TRACE • EXTRACT • ASCEND</div>
-        <div className="hud__brand-line" />
-        <nav className="hud__actions">
-          {/* Only the two global controls stay in the top row. Per-node actions
-              (OPEN/TRACE/ISOLATE/EXTRACT) live in the Node Inspection panel; SOUND,
-              RESET VIEW and UPGRADES moved to compact hint lines in the left HUD column. */}
-          <button
-            className={`hud__act${settingsOpen ? ' is-active' : ''}`}
-            title=", · INTERFACE SETTINGS"
-            onClick={onOpenSettings}
-          >
-            SETTINGS <kbd>,</kbd>
-          </button>
-          <button className="hud__act hud__act--fs" onClick={toggleFullscreen}>
-            <span className="hud__act-i">⛶</span> {isFs ? 'WINDOWED' : 'FULLSCREEN'}
-          </button>
-        </nav>
+      {/* Top-center lockup. The large NEVA NETWORK title is reserved for the boot/onboarding
+          cinematic (Mission 00) and the .mx mission/finale overlays + landing — during active
+          gameplay it's hidden and the compact top-left logo carries the brand. The command bar
+          (.hud__actions) always stays. */}
+      <header className={`hud__brand${pulse ? ' is-pulse' : ''}${game.pulseActive ? ' is-pulse-hide' : ''}${intro ? '' : ' hud__brand--bare'}`}>
+        {intro && (
+          <>
+            <h1 className="hud__brand-title">NEVA NETWORK</h1>
+            <div className="hud__brand-sub">BREACH THE MEMORY GRID</div>
+            <div className="hud__brand-micro">TRACE • EXTRACT • ASCEND</div>
+            <div className="hud__brand-line" />
+          </>
+        )}
       </header>
+
+      {/* Global controls as compact icon buttons, docked top-right (out of the centre). Per-node
+          actions live in the Node Inspection panel; SOUND / RESET VIEW / UPGRADES are hint lines in
+          the left HUD column. Icon-only with titles + aria-labels for accessibility. */}
+      <nav className="hud__quickbtns">
+        <button
+          className={`hud__iconbtn${settingsOpen ? ' is-active' : ''}`}
+          title="INTERFACE SETTINGS  [,]"
+          aria-label="Interface settings"
+          onClick={onOpenSettings}
+        >
+          <HudIcon icon={IconSettings} size={16} />
+        </button>
+        <button
+          className="hud__iconbtn"
+          title={isFs ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
+          aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+          onClick={toggleFullscreen}
+        >
+          <HudIcon icon={isFs ? IconMinimize : IconMaximize} size={16} />
+        </button>
+      </nav>
 
       {/* trace edge flicker (>=70%) */}
       {tr >= 70 && !game.locked && <div className="hud__trace-edge" />}

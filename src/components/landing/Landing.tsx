@@ -224,11 +224,14 @@ export default function Landing({ onEnter }: Props) {
       els.forEach((el) => el.classList.add('is-in'));
       return;
     }
+    const reveal = (el: HTMLElement) => {
+      el.classList.add('is-in');
+    };
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           if (e.isIntersecting) {
-            e.target.classList.add('is-in');
+            reveal(e.target as HTMLElement);
             io.unobserve(e.target);
           }
         }

@@ -28,6 +28,7 @@ export default function PlayerSubnetworkPanel({
 }) {
   const r = game.resources;
   const sub = game.playerSubnetwork;
+
   return (
     <div className={`up-backdrop${closing ? ' is-closing' : ''}`} onClick={onClose}>
       <div className={`up up--subnet${closing ? ' up--closing' : ''}`} onClick={(e) => e.stopPropagation()}>

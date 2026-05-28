@@ -1,4 +1,5 @@
-import { useState, type MouseEvent } from 'react';
+import { useRef, useState, type MouseEvent } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { NETWORK } from '../network';
 import {
@@ -170,6 +171,34 @@ export default function HolographicNodePanel({ selected, game, dispatch, onClose
   const isGateway = type === 'GATEWAY';
   const streamLines = isGateway ? GATEWAY_LINES : isWatcher ? WATCHER_LINES : STREAM_KEYS;
 
+  // VIEWPORT CLAMP — the panel is anchored to the node's projected screen point (drei <Html>), which
+  // can place a tall panel partly below the viewport (the FREE SCAN button gets clipped). Each frame
+  // we measure the frame and translate the whole panel UP just enough to keep its bottom on-screen
+  // (never pushing the header above the top). Imperative (no React re-render on the hot path).
+  const npRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const appliedDy = useRef(0);
+  useFrame(() => {
+    const np = npRef.current;
+    const frame = frameRef.current;
+    if (!np || !frame) return;
+    const rect = frame.getBoundingClientRect();
+    if (rect.height === 0) return; // not laid out yet
+    const margin = 16;
+    const vh = window.innerHeight;
+    // strip the currently-applied offset to get the panel's natural top/bottom
+    const naturalTop = rect.top - appliedDy.current;
+    const naturalBottom = rect.bottom - appliedDy.current;
+    let dy = 0;
+    if (naturalBottom > vh - margin) dy = vh - margin - naturalBottom; // overflows bottom → shift up
+    if (naturalTop + dy < margin) dy = margin - naturalTop; // but keep the header on-screen
+    dy = Math.round(dy);
+    if (dy !== appliedDy.current) {
+      appliedDy.current = dy;
+      np.style.transform = dy ? `translateY(${dy}px)` : '';
+    }
+  });
+
   return (
     <Html position={pos} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
       <div className="np-anchor" key={selected}>
@@ -180,13 +209,13 @@ export default function HolographicNodePanel({ selected, game, dispatch, onClose
           <span className="np-target__c np-target__c--br" />
         </div>
 
-        <div className={`np${closing ? ' is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <div ref={npRef} className={`np${closing ? ' is-closing' : ''}`} onClick={(e) => e.stopPropagation()}>
           {/* AR corner brackets — assemble out from centre on open, combine back on close */}
           <span className="np__corner np__corner--tl" />
           <span className="np__corner np__corner--tr" />
           <span className="np__corner np__corner--br" />
           <span className="np__corner np__corner--bl" />
-          <div className={`np__frame${prev.extracted ? ' is-extracted' : ''}`}>
+          <div ref={frameRef} className={`np__frame${prev.extracted ? ' is-extracted' : ''}`}>
             <span className="np__scan" />
 
             <div className="np__head">

@@ -110,6 +110,111 @@
 
 .pf__rule { height: 1px; background: linear-gradient(90deg, var(--pf-ice-faint), rgba(255, 255, 255, 0.06), transparent); margin: 14px 0; }
 
+/* local account switcher */
+.pf__sh--tight { margin-top: 0; }
+.pf__accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 7px;
+}
+.pf__account {
+  appearance: none;
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--wg-dim);
+  cursor: pointer;
+}
+.pf__account:hover {
+  color: #fff;
+  border-color: rgba(150, 210, 220, 0.46);
+  background: rgba(150, 210, 220, 0.055);
+}
+.pf__account.is-active {
+  border-left-color: var(--pf-ice);
+  background: rgba(150, 210, 220, 0.08);
+  cursor: default;
+}
+.pf__account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: #fff;
+}
+.pf__account-meta {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: var(--wg-dim);
+}
+.pf__account-on {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--pf-ice);
+}
+.pf__create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 9px;
+}
+.pf__create-input {
+  min-width: 0;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom-color: var(--pf-ice-dim);
+  padding: 8px 10px;
+  outline: none;
+}
+.pf__create-input:focus { border-color: var(--pf-ice); }
+.pf__create-btn {
+  appearance: none;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #061013;
+  background: var(--pf-ice);
+  border: 1px solid var(--pf-ice);
+  padding: 8px 11px;
+  cursor: pointer;
+}
+.pf__create-btn:hover:not(:disabled) {
+  background: #fff;
+  border-color: #fff;
+}
+.pf__create-btn:disabled {
+  color: var(--wg-faint);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--wg-ghost);
+  cursor: not-allowed;
+}
+.pf__create-note {
+  margin-top: 6px;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--wg-faint);
+  text-transform: uppercase;
+}
+.pf__create-note.is-warn { color: rgba(230, 160, 160, 0.95); }
+
 /* hero: callsign · level · score */
 .pf__hero { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
 .pf__hero-card {
@@ -250,3 +355,37 @@
 .cs__skip { color: var(--wg-faint); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--wg-ghost); }
 .cs__skip:hover { color: #fff; border-color: var(--pf-ice-dim); }
 .cs__note { margin-top: 12px; font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--wg-faint); }
+
+/* Readability override: profile/callsign panels should be clear before they are stylized. */
+.pf,
+.cs,
+.pf-launch,
+.pf__account,
+.pf__create-input,
+.pf__create-btn {
+  font-family: var(--wg-ui);
+  font-weight: 600;
+  text-shadow: var(--readable-text-shadow);
+}
+
+.pf :is(.pf__sub, .pf__account-meta, .pf__create-note, .pf__hero-k, .pf__sh b, .pf__row-k, .pf__cell-k, .pf__ach-desc, .pf__acct-line span, .pf__hint, .pf__reset, .pf__reset-yes, .pf__reset-no),
+.cs :is(.cs__sub, .cs__rule-line, .cs__skip, .cs__note) {
+  color: var(--wg-dim);
+}
+
+.pf :is(.pf__title, .pf__account-name, .pf__create-input, .pf__hero-v, .pf__row-v, .pf__cell-v, .pf__ach-name, .pf__acct-line b),
+.cs :is(.cs__title, .cs__input, .cs__go) {
+  color: #fff;
+  font-weight: 700;
+}
+
+.pf :is(.pf__title, .pf__sub, .pf__account-name, .pf__account-meta, .pf__account-on, .pf__create-input, .pf__create-btn, .pf__create-note, .pf__hero-k, .pf__row-k, .pf__cell-k, .pf__ach-name, .pf__acct-line, .pf__hint, .pf__reset, .pf__reset-yes, .pf__reset-no),
+.cs :is(.cs__title, .cs__sub, .cs__rule-line, .cs__go, .cs__skip, .cs__note) {
+  letter-spacing: 0.1em;
+}
+
+.pf,
+.cs {
+  background: rgba(6, 9, 11, 0.94);
+  border-color: rgba(255, 255, 255, 0.22);
+}

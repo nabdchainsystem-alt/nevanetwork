@@ -200,7 +200,7 @@ visual — **no gameplay/logic/save changes**.
 | **Inspection Panel** | AR info panel | Thin glass panel, corner brackets, scanlines | Node data + actions | `HolographicNodePanel` |
 | **Data Stream Panel** | Secondary stream readout | Small panel beside the Inspection Panel | OPEN STREAM output | `HolographicNodePanel` (`.np-stream`) |
 | **Node Info Panel** | Compact selected-node metadata card | Small dark-transparent card, thin gray border, mono text (mid-left) | Quick technical identity of the selected node (ID/type/status/exact coords/sector/depth/layer/links/risk/value/signal + quick flags); **shown only during node selection**. Read-only — does not duplicate the Inspection Panel's actions | `ExplorerHud` (`.ni`) |
-| **Title Lockup** | Top-center brand | Cinematic segmented **NEVA NETWORK** wordmark + subtitle + micro-tagline + glowing light line | In-world identity/header (see §4a) | `ExplorerHud` (`.hud__brand*`) |
+| **Title Lockup** | Brand wordmark | Cinematic segmented **NEVA NETWORK** wordmark + subtitle + micro-tagline + glowing light line. Big centered version = **cinematic/menu only** (Mission 00 boot, `.mx` overlays, landing); active gameplay uses the **compact top-left `.hud__logo`** instead (see §4a) | In-world identity/header | `ExplorerHud` (`.hud__brand*` / `.hud__logo`) |
 | **Coordinate Ruler** | Bottom nav HUD | Full-width comb/barcode + readout | Space-time position | `ExplorerHud` (`.hud__coords`) |
 | **Tracking Brackets** | Corner brackets on a node | 4 rotating L-corners | Hover/selection marker | `HolographicNodePanel` (`.np-target`) / `SelectedNodeFocus` |
 | **Leader Line** | Node → panel connector | Thin low-opacity line + tick | Ties panel to node | `HolographicNodePanel` CSS (`.np::before`) |
@@ -232,6 +232,20 @@ The top-center brand (`.hud__brand*` in `ExplorerHud`, styled in `styles.css`) r
   the glowing light line + action bar follow below, clear of the command bar. Absolutely
   positioned, so it never pushes gameplay UI down. Subtitle + micro-line hide on narrow
   (≤ mobile) screens; the title scales down to 17px / 0.42em there.
+
+#### Brand placement (HUD branding pass)
+- **Active gameplay uses a compact top-left `NEVA NETWORK` logo** (`.hud__logo` in the top status
+  bar's `.hud__loc`) — the same segmented/cut cinematic title style, scaled to ~14px / `0.36em`,
+  with a soft controlled glow. It reads as a HUD identity watermark, not a title screen.
+- **The functional sector line sits to the right of the logo** on one baseline-aligned row
+  (`.hud__loc` is `flex-direction: row`): `SECTOR A0n · <GRID NAME> · GRID <id>` (A01 → `MEMORY GRID`,
+  late-A01 → `DEEP NETWORK`, A02 → `DEEP GRID`), in muted teal-ice (`.hud__loc-grid`); truncates
+  gracefully on narrow screens. The hexagon sector emblem stays to the left of the row.
+- **The large centered `.hud__brand` title/subtitle/micro-line is reserved for cinematic/menu
+  states** — it now renders only during the Mission 00 boot/onboarding (`intro`); for Missions
+  01–20 + Sector A02 it is hidden and the command bar (`.hud__actions`, always present) sits just
+  below the top bar (`.hud__brand--bare`). Mission briefings / completion / finale (`.mx__brand`)
+  and the landing page carry their own large wordmark, so the big title still appears there.
 
 ---
 
@@ -1597,3 +1611,404 @@ config) — alongside the existing `pnpm waitlist:count`. Aggregate-only output 
 gating (local), feedback capture, analytics capture, protected admin summary, safer stats.
 **Still missing (by design):** real accounts · login/sessions · passwords · email sending/
 verification · remote save · a database · auth on broader surfaces · token/presale/Web3/payments.
+
+---
+
+## 32. Visual Upgrade Pass v1 (rendering only — no gameplay change)
+
+A premium/depth/readability pass on the 3D network. **Rendering/material/shader only** — no
+gameplay, missions, resources, trace, save, or progression touched; node **state colour language
+is unchanged** (active/selected/extracted/isolated/decoy/locked/gateway/core/home stay readable).
+
+- **Network depth** — interactive nodes + background dust + links now fade by distance (near sharp →
+  far melts into the void) via `patchNodeDepthFade` / tighter `createFadeLineMaterial` far ranges, so
+  the field reads as a deep 3D volume, not a flat star map. Far clutter reduced (dimmer far dust,
+  tighter link far-fade); far nodes stay present for scale.
+- **Node material quality** — each interactive node is now a **soft translucent core cube** inside a
+  **crisp additive hollow-edge frame** (one extra merged `LineSegments`, one draw call) with a very
+  subtle global glow breath — replacing the old solid/overexposed boxes. Raycasting is unchanged
+  (separate hit-proxy mesh). `InteractiveNodes.tsx` + `fadeMaterials.ts`.
+- **State visual language refined** (recognizable, not redesigned): EXTRACTED is now **dim ice-blue**
+  (processed/spent) instead of green — matching the documented convention; CORE carries a **premium
+  teal-ice glow** (controlled); GATEWAY a dim cool "route" tint; HOME (once unlocked) a structured
+  cool tint; LOCKED a dim/blocked cool look; tripped DECOY muted red. State (extracted/isolated/
+  locked) still takes precedence over identity tint. `InteractiveNodes.tsx` + `SelectedNodeFocus.tsx`.
+- **Bloom/glow** — slightly higher luminance threshold + softer smoothing + tighter radius so only
+  bright edges/cores/selection bloom (crisp, not a blown-out white blob). Monochrome + teal-ice
+  identity preserved. `InteractiveNetworkExplorer.tsx`.
+
+Files: `fadeMaterials.ts`, `components/InteractiveNodes.tsx`, `components/NodeConnections.tsx`,
+`components/InstancedBackgroundNodes.tsx`, `components/InteractiveNetworkExplorer.tsx`. Build/lint/
+typecheck pass; gameplay unchanged.
+
+---
+
+## 33. Visual Upgrade Pass v2 — cinematic action feedback (visual only)
+
+Clear, premium FX for **existing** actions. **No reducer/gameplay/save change** — effects are
+*derived* from game-state transitions and are transient + local (never stored in the save).
+
+- **Derivation** (`actionFx.ts`): from a (prev → next) `GameState` diff — using the reducer's existing
+  `msgId` / `msgNode` / `message.kind` + status/depth — classify the resolved action into an FX event
+  (`export · trace · isolate · openStream · enterSubnetwork · coreSecure · fail`). Success effects only
+  fire on `kind === 'ok'`; failed actions (`fail`) get a small glitch flicker; a tripped DECOY reads as
+  a glitch, not an export. CORE/Alpha-Core/sector rising edges → premium `coreSecure`.
+- **Detection + lifecycle** (`GameApp.tsx`): a `useEffect` on `game` pushes derived events into local
+  `fxEvents` state (capped at 8), auto-pruned by per-event timers; `enterSubnetwork` also flashes a
+  brief screen "depth dive" warp (`.fx-dive`).
+- **3D layer** (`components/ActionEffects.tsx`): a few small additive **thin-line** primitives —
+  expanding/contracting cube frames (scan/containment), an upward dashed data **streak** (export),
+  a **core flash**, gateway **route convergence**, and a deterministic **glitch** — animated by
+  normalized age and removed on expiry. Shared module-level geometries; only a handful exist at once
+  (user-paced). Rendered inside the rotating network group; raycasting untouched.
+- **Per-action feel:** EXPORT = data pulled out (frame pop + flash + rising streak, node → ice-blue);
+  TRACE = route-scan ripple; ISOLATE = containment cage that closes in; OPEN STREAM = scan rings
+  (plus the existing leader line); ENTER SUBNETWORK = route convergence + dive flash + the existing
+  DEPTH 0N ACCESSED / SUBNETWORK LINK overlay; CORE = controlled premium teal-ice pulse (with the
+  existing `core-sweep`). NEVA palette only (white / ice-blue / slate / muted red) — no colour, no
+  arcade. Lightweight (no textures/assets/heavy shaders); FPS stable.
+
+Files: `actionFx.ts`, `components/ActionEffects.tsx`, `components/InteractiveNetworkExplorer.tsx`,
+`GameApp.tsx`, `styles.css` (`.fx-dive`). Build/lint/typecheck pass; gameplay/save unchanged.
+
+---
+
+## 34. Visual Upgrade Pass v3 — link route identity + centralized material seed (visual only)
+
+Gives the **links** stronger identity to match the v1/v2 node work. **Rendering only** — no reducer,
+gameplay, missions, resources, trace, save, picking, or progression touched. Builds on (does not
+replace) the existing link rendering: normal links (`NodeConnections`), the dashed/flicker corrupted
+overlay (`CorruptedLinks`), and the selected-node's travelling trace links (`SelectedNodeFocus`) all
+stay as they are.
+
+- **Objective route links** (`components/ObjectiveRouteLinks.tsx`) — the gap that remained: the edges
+  *leading to* the current mission objective node used to render as plain gray. Now the (≤3) edges
+  from the objective node to its neighbours render as a **flowing "living route" travelling toward the
+  node**, tinted by the objective's visual kind: teal-ice for **gateway/data/core** routes, a slower
+  **striped/blocked** pattern for **firewall** routes, an unstable muted-red flow for **corruption**,
+  and a calm flow for **relay**. Mounted beside `ObjectiveMarker` in the rotating network group and
+  driven by the SAME gated `objectiveNode` prop — so it shows only when the objective is **not** the
+  selected node (never fights `SelectedNodeFocus`'s own trace links) and only post-tutorial.
+  Distance-faded + additive (bloom-friendly, kept below pure white). Cheap: one node's edges → one
+  draw call, one `uTime` uniform write/frame.
+- **Centralized material seed** (`src/visual/nevaMaterials.ts`) — owns the route-link palette
+  (`ROUTE_KINDS` per `ObjectiveVisualKind`) + `createRouteLinkMaterial` (the flowing/striped/jitter
+  shader) + the shared link distance-fade window. The shared home for further link/material
+  centralization. (Node / selected / marker palettes already live centralized with their own
+  components — `InteractiveNodes.colorOf`, `SelectedNodeFocus`, `ObjectiveMarker.KINDS`,
+  `fadeMaterials` — and are intentionally left as-is.)
+
+Files: `src/visual/nevaMaterials.ts` (new), `components/ObjectiveRouteLinks.tsx` (new),
+`components/InteractiveNetworkExplorer.tsx` (mount). Build/lint/typecheck pass; gameplay/save/picking
+unchanged.
+
+---
+
+## 35. Visual Upgrade Pass v3.1 — VISUAL MODE toggle (CLASSIC ↔ ENHANCED), wired & visible
+
+A **deliberately visible** rendering pass (not subtle polish): a proper CLASSIC/ENHANCED toggle that
+wires the centralized material presets into the **real active render path**. Press **K** to flip
+between a flat baseline (CLASSIC) and the premium look (ENHANCED, default) — the before/after is
+obvious. Pure visual — no gameplay, missions, resources, trace, save, picking, or progression changes.
+
+- **Single source of truth** (`src/visual/nevaMaterials.ts` → `VISUAL_PRESETS` + `getPreset(enhanced)`):
+  one preset object per mode holds node core/edge opacity, brightness, glow-breath, link base
+  opacity + far-fade, traced-link boost, selected-frame opacities + pulse, and **Bloom**
+  intensity/threshold. The real components read from it — no scattered magic numbers.
+- **Wired into the active components** (the previous pass existed but read as "no change" because the
+  difference was small — this makes it a real, mode-gated jump):
+  - **Interactive nodes** — `components/InteractiveNodes.tsx`: core/edge opacity, per-node brightness,
+    and glow-breath now come from the preset (`enhanced` prop). ENHANCED adds **structural shells**
+    (shape cues, not just colour): a **layered double-frame shell on the CORE** and a **larger
+    structured frame on the HOME** node (cheap static additive line frames; the network's rotation
+    animates them). CLASSIC = dim flat cores, faint frame, no breath, no shells.
+  - **Selected / focused node** — `components/SelectedNodeFocus.tsx`: fill/edge/bracket opacities +
+    success-pulse + traced-link boost scale from the preset. ENHANCED = crisp, brighter, premium
+    focus frame; CLASSIC = simpler. Picking unchanged (hit-proxy mesh).
+  - **Normal links** — `components/NodeConnections.tsx`: resting opacity from the preset (ENHANCED
+    calmer/quieter so the glow + route flow carry the look — less spiderweb).
+  - **Bloom** — `components/InteractiveNetworkExplorer.tsx`: intensity/threshold from the preset
+    (ENHANCED = strong controlled glow; CLASSIC = near-flat). The most visible global lever.
+  - Corrupted (`CorruptedLinks`), traced (`SelectedNodeFocus`), and objective-route
+    (`ObjectiveRouteLinks` / §34) links keep their distinct identities.
+- **The toggle** (`GameApp.tsx` + `.visual-mode` in `styles.css`): **K** flips
+  `enhancedVisuals` (default ENHANCED); a small NEVA chip (`VISUAL MODE: ENHANCED|CLASSIC [K]`, ice
+  accent when ENHANCED) shows the active mode and is clickable. Local UI state only — not persisted,
+  not in the save. Blocked while a modal panel owns the keyboard, like the other dev hotkeys.
+- **Performance:** instancing/batched geometry preserved; the structural shells are ≤3 static line
+  meshes for ≤2 nodes; preset reads are reference lookups (no per-frame allocations).
+
+Files: `src/visual/nevaMaterials.ts`, `components/InteractiveNodes.tsx`,
+`components/SelectedNodeFocus.tsx`, `components/NodeConnections.tsx`,
+`components/InteractiveNetworkExplorer.tsx`, `GameApp.tsx`, `styles.css` (`.visual-mode`).
+Build/lint/typecheck pass; gameplay/save/picking unchanged.
+
+---
+
+## 36. Visual Upgrade Pass v4 — link / route rendering (visual only)
+
+Makes the **links** feel like an active holographic system. Rendering only — no gameplay, missions,
+resources, trace, save, picking, or progression changes. ENHANCED (K) gets the upgrades; CLASSIC
+keeps the old link behaviour.
+
+- **Normal links cleaner** (`components/NodeConnections.tsx`): in ENHANCED the resting mesh runs at a
+  calmer base opacity AND a tighter far-fade (`preset.linkFar`, driven live into the material's
+  `uFar` uniform) so distant links melt away sooner — less far "spiderweb" — while near/mid links
+  stay readable. CLASSIC keeps the wider far range + flatter opacity.
+- **Traced links settle bright** (`components/NodeConnections.tsx`): once a node's route is scanned
+  (`status.traced`), its resting links settle into a brighter, stable **scanned-ice** colour
+  (ENHANCED only) — so revealed routes light up across the network and the player immediately reads
+  "this route was scanned." The short **moving pulse** on TRACE is the selected node's travelling
+  trace-band (`SelectedNodeFocus`, boosted by `preset.tracedBoost`) + the `trace` action FX
+  (§33) — together: scan-pulse → settle brighter.
+- **Corrupted links** (`components/CorruptedLinks.tsx`, unchanged): already a dashed / glitch-gap /
+  flicker shader in muted red-gray with AR warning ticks; on TRACE the edge stabilises (drops from
+  the overlay, the resting link reverts → now reads as a traced/scanned route) with the `trace` FX
+  standing in for the route-restored pulse.
+- **Firewall / gateway / core routes** (`components/ObjectiveRouteLinks.tsx` + `nevaMaterials.ts`,
+  §34): the route *to the current objective* already renders per-kind — **firewall** = striped /
+  blocked, **gateway** = teal-ice flow toward the node, **core** = stronger flow; the `coreSecure`
+  FX (§33) + core-sweep cover the premium "secured" moment. (Per-type segmentation/flow on every
+  LOCKED/GATEWAY node across the field is intentionally NOT added — it would clutter and cost; the
+  objective route carries the mission-relevant one.)
+- **Action-triggered line effects** (`actionFx.ts` + `components/ActionEffects.tsx`, §33): export /
+  trace / isolate / openStream / enterSubnetwork / coreSecure / fail are already hooked to
+  *successful* state transitions only (no FX on failed actions).
+- **Performance:** all on the existing batched `LineSegments` meshes — the traced state is a
+  per-vertex colour write on state change (not per frame); the far-fade is a single `uFar.set` per
+  frame (no allocation). No new per-link components, textures, or assets.
+
+Files: `components/NodeConnections.tsx`, `src/visual/nevaMaterials.ts` (presets `linkFar` /
+`tracedBoost`). Build/lint/typecheck pass; gameplay/save/picking unchanged.
+
+---
+
+## 37. Visual Upgrade Pass v5 — camera / focus cinematic composition (visual only)
+
+Improves the *feel* of selecting and inspecting nodes. Camera/composition only — no gameplay,
+missions, picking, save, or progression changes. The existing focus path was already cinematic
+(smooth exponential glide-in that never overshoots or goes behind the node, ease-in-out return,
+perpetual node-centred focus orbit + slow bob, panels mounting in sync at 85% of the glide,
+objective focus reusing the same `setSelected` glide); the one real gap was **composition**.
+
+- **Cinematic composition offset** (`components/FlyCamera.tsx`): a focused node used to sit
+  dead-centre, so the right-side Inspection Panel covered it. Now, once the node is focused **and**
+  its panel has revealed, the camera eases its look-at to a point slightly to the node's RIGHT, so
+  the **node settles LEFT-of-centre** — clearly visible between the Node Info (left) and Inspection
+  (right) panels. Eased in/out (`COMPOSE_LERP`), magnitude `COMPOSE_OFFSET` × orbit radius (subtle —
+  never enough to lose the node), and synced to the panel entrance via `focusReadyNode`. On deselect
+  / retarget it eases back to dead-centre. **Picking is unaffected** (raycast + far-pick fallback use
+  the live cursor, not the look-at), and manual flight is untouched (the offset lives only in the
+  orbit look-at branch).
+- **VISUAL MODE gated** (K): the composition offset is **ENHANCED only**; **CLASSIC keeps the old
+  dead-centre framing**, so the K toggle also shows the camera-feel difference. `enhanced` threads
+  `GameApp → InteractiveNetworkExplorer → FlyCamera` (mirrored to a frame-loop ref).
+- **Already present (verified, not redone):** smooth select glide + smooth `R` return-to-overview
+  (ease-in-out, keeps progress), Shift+R full reset unchanged, focus micro-motion (orbit + bob),
+  synchronized Node Info + Inspection reveal, objective focus via the same glide, gateway/depth dive.
+  The panels intentionally have **no leader line** (removed earlier) — not reintroduced.
+- **Performance:** the offset is a few vector ops per frame on existing temporaries (no allocations),
+  inside the existing camera update loop. No new dependencies.
+
+Files: `components/FlyCamera.tsx` (composition offset + `enhanced` gate),
+`components/InteractiveNetworkExplorer.tsx` (pass `enhanced`). Build/lint/typecheck pass;
+gameplay/save/picking unchanged.
+
+---
+
+## 38. Visual Upgrade Pass v6 — sector / depth atmosphere (visual only)
+
+Makes each sector AND each depth feel different while keeping the monochrome AR identity. Atmosphere
+only — no gameplay, missions, save, picking, or progression changes.
+
+- **Centralized atmosphere presets** (`src/visual/nevaMaterials.ts`): `SECTOR_ATMOSPHERE` (A01/A02/
+  A03) + `depthAtmosphere(depth)` + a pure `resolveAtmosphere(missionId, depth, visualPreset)` that
+  combines sector mood + depth scale + the VISUAL MODE bloom base into one `{ fogDensity,
+  bloomIntensity, bloomThreshold, particleOpacity }`. Single source of truth; no scattered constants.
+  - **A01 — MEMORY GRID:** clean first layer — low fog (0.0026), calm dust (~0.82), higher bloom
+    threshold so only the brightest cores/edges bloom. Readable, mysterious, not hostile.
+  - **A02 — DEEP NETWORK:** deeper/more dangerous — heavier fog (0.0040), fuller dust (~1.0), +bloom,
+    lower threshold so routes/cores glow harder. (Plus the existing `data-sector='A02'` heavier CSS
+    vignette + cool edge tint in `ExplorerHud`.)
+  - **A03 — CORRUPTED SECTOR (FUTURE placeholder):** strongest fog, unstable `flicker`, deeper
+    contrast — **defined for later, NOT activated** (no mission range maps to A03; `sectorKeyForMission`
+    only returns A01/A02).
+- **Depth-based scaling** (`depthAtmosphere`): deeper layers add fog (+0.0006/depth), a touch more
+  bloom pressure, and **thinner far dust** (more depth separation) — subtle but visible as you descend.
+- **Smooth transitions** (`SectorAtmosphere` in `InteractiveNetworkExplorer.tsx`): the `<fogExp2>` is
+  created once at a stable density (`FOG_INITIAL`); a tiny in-Canvas `useFrame` **eases
+  `scene.fog.density`** toward the live target, so moving into A02 / deeper fades the atmosphere in
+  instead of snapping. The background dust eases its global presence (`InstancedBackgroundNodes`
+  `atmoOpacity`, applied to the mesh material) the same way. (Bloom updates at the boundary, under the
+  existing mission-warp / depth-flash cinematics.)
+- **Background dust** (`components/InstancedBackgroundNodes.tsx`): already clustered + near/far
+  depth-faded + far-dimmed (less "white snow"); now also breathes with the sector/depth atmosphere
+  via the eased `atmoOpacity` — calmer in A01, denser in A02, thinner deeper.
+- **HUD sector label:** unchanged — A01 MEMORY GRID / A02 DEEP NETWORK already correct; A03 name
+  (`CORRUPTED SECTOR`) reserved in the preset for when it's built.
+- **Performance:** memoized presets, pure resolver, two single-value eases per frame (fog density +
+  particle opacity), no new particles/textures/assets, no per-frame allocations.
+
+Files: `src/visual/nevaMaterials.ts` (presets + resolver), `components/InteractiveNetworkExplorer.tsx`
+(SectorAtmosphere + atmosphere wiring), `components/InstancedBackgroundNodes.tsx` (`atmoOpacity`).
+Build/lint/typecheck pass; gameplay/save/picking unchanged.
+
+---
+
+## 39. Sector Progression — Sector A01 (Missions 00–20) → Sector A02 (new procedural grid)
+
+A major progression update that REFRAMES the whole existing game as **Sector A01** and adds a
+cinematic crossing into **Sector A02** — a new, larger, deterministic procedural grid. **Mission
+00–20 gameplay is unchanged** (same reducer, gates, save, network); everything here is ADDITIVE and
+only activates once A02 is entered, so A01 cannot break.
+
+### Sector mapping
+- **Missions 00–20 = Sector A01.** (Within A01: Memory Grid 00–07, then the Deep Network chapter
+  08–20 — a *chapter*, not a separate sector.) The HUD sector label now reads **A01** for the whole
+  chain; the chapter name still shows MEMORY GRID / DEEP NETWORK.
+- **Mission 20 completion = SECTOR A01 COMPLETE** (Alpha Core online) and **UNLOCKS the route to
+  Sector A02** — it no longer means "A02 secured". The internal `sectorA02Secured` flag is kept as
+  the Mission-20 *completion gate* (renaming it would need a save migration); only the player-facing
+  framing changed.
+
+### Sector progression state (`game.ts` → `GameState.sectorProgress`, additive + save-merged)
+`{ currentSector: 'A01'|'A02', completedSectors: string[], a02Unlocked, a02Entered, a02Seed }`.
+Mission 20 complete → `a02Unlocked = true` + `completedSectors` gains `'A01'` (idempotent, runs in
+the reducer post-latch). New action **`ENTER_SECTOR_A02`** flips `currentSector='A02'` + `a02Entered`
+and pins the deterministic `a02Seed` — preserving ALL progress (profile/resources/upgrades/private
+grid/modules/achievements/AI). Old saves default to A01 (loadSave deep-merges `sectorProgress`).
+
+### A01 → A02 cinematic (`components/SectorTransition.tsx` + `sectorTransition.css`)
+From the A01-complete overlay (**ENTER SECTOR A02**) or the dev terminal (`enter a02`): full
+**blackout** → a small glowing **boot/terminal panel** → a **typewriter narrative** (timed, subtle
+flicker, Enter/Space gracefully fast-forwards) → on finish it dispatches `ENTER_SECTOR_A02` (the A02
+grid mounts + begins its reveal *behind* the still-black overlay) → the overlay **fades out** to
+reveal the rebuilt HUD + the forming grid. Pure presentation; GameApp owns the actual sector switch.
+
+### A02 procedural grid (`src/sectorGen.ts`)
+`generateSector(opts)` → the same `Network` shape as A01, parameterised + larger. **A02_OPTS** =
+**16 lobes · 760 nodes · ~1200 links (incl. ~30 LONG bridge routes)**, `spreadScale 2.6`,
+`bounds.radius ≈ 331`. A **`fillFraction` (≈0.42)** scatters ~310 nodes UNIFORMLY through the sphere
+so the space BETWEEN the lobes is populated — a DENSE field with no big black gaps (the rest cluster
+in the lobes). Deterministic from a **string seed** `A02_SEED = hash('NEVA_A02_DEEP_GRID')`; memoized
+once as `SECTOR_A02`. The field is **re-centred on the origin** so the overview camera frames it dead-on. Exposes `special`
+anchors (core / gateway hubs / corruption / firewalls) + `bounds` (center+radius) as **hooks for
+future A02 missions + camera framing** (not yet wired into gameplay).
+
+> **Follow-up fix (A02 "empty space" → visible grid):** the first pass rendered but read as empty —
+> A01-sized nodes (0.56u) are sub-pixel across a 5× world, the camera sat at the A01 radius inside the
+> inner void, and clusters were isolated islands. Fixed by: (1) **bigger A02 nodes** (core 1.7 /
+> frame 2.6) + wider depth-fade so they read as chunky cubes; (2) **long bridge routes** linking the
+> clusters; (3) an **A02 establishing camera** — `FlyCamera` gained `overviewRadius`/`overviewHeight`
+> props; the explorer passes `bounds.radius × 1.5 ≈ 500`, so entering A02 eases the camera back to
+> frame the whole grid (R-reset returns to this A02 framing; zoom ceiling raised); (4) re-centred grid
+> + (5) lighter A02 fog (0.0014, no A01-depth bleed) so the big structure reads with depth haze.
+>
+> **Root-cause render bug (fixed):** the field's `useFrame` guarded on `mesh.instanceColor`, but that
+> is `null` until the first `setColorAt()` — so the instance-writing loop never ran and all 340 cubes
+> stayed at the identity matrix (stacked at the origin → ONE dot, the reported "empty" A02). Fixed by
+> dropping that guard (the loop allocates `instanceColor` on its first write) + filling the sphere so
+> the grid is dense from any camera position.
+>
+> **A02 background star-dust:** `InstancedBackgroundNodes` gained a `spread` prop (default 1 = A01
+> unchanged). A02 passes `spread 3`, scaling the whole glowing-cube star field — positions, cube size,
+> AND depth-fade — up to fill the larger world so the same A01-style "stars" surround the A02 grid.
+>
+> **A02 flight speed:** the larger world flies ~30% faster — `FlyCamera` scales `BASE_SPEED` by a
+> `flightSpeedScale` prop (1 in A01, 1.3 in A02) so traversing the bigger grid doesn't feel sluggish.
+
+### Visible-route system (link readability — all sectors)
+
+Links are now **logical graph vs visible routes**, so the field reads as data routes, not a permanent
+spiderweb. The full LOGICAL graph stays in data (`NETWORK.edges` / `SECTOR_A02.net.edges`). What's
+SHOWN is tiered on the existing batched `LineSegments` (per-edge vertex-colour magnitude = relative
+opacity; one global `uOpacity` scales it) — no per-frame geometry rebuild, no component-per-line.
+
+- **Route categories** (`src/visual/routes.ts` — `RouteKind` + `ROUTE_STYLES`): STRUCTURAL ·
+  DATA_ROUTE · TRACE_ROUTE · GATEWAY_ROUTE · CORRUPTED_ROUTE · FIREWALL_ROUTE · PRIVATE_GRID_ROUTE ·
+  OBJECTIVE_ROUTE. The animated categories are drawn by their existing dedicated overlays
+  (`SelectedNodeFocus` traced flow, `CorruptedLinks` dashed, `ObjectiveRouteLinks` gateway/firewall/
+  objective, `ActionEffects` export data-stream); this module owns STRUCTURAL + the A02 bridge tier.
+- **Default (free-scan):** most links are faint **STRUCTURAL** background (≈0.08 effective);
+  meaningful routes pop above it — state routes in A01 (`NodeConnections`: extracted ice / isolated
+  dim / tripped-decoy red / **TRACED** scanned-ice), and the **15 long BRIDGE routes** in A02
+  (`SectorA02Field`: teal GATEWAY tier, ≈0.25) against the **934 faint structural** links. Far links
+  fade further (line fade material). No more uniform spiderweb.
+- **Reveal:** TRACE → traced endpoints settle bright (persist); EXPORT → temporary data-stream
+  (`ActionEffects`); gateway/objective/corrupted/firewall → their overlays, shown when relevant
+  (selected / nearby / objective / dev). Brighter routes draw/pulse in then settle.
+- **Dev Scan (V):** lifts STRUCTURAL toward the full logical graph (A01 `struct` → `STRUCT_DEV`; A02
+  link opacity ×2) so all links show for debugging, while normal play stays clean.
+- **A02 line density:** big but readable — faint cluster structure + the few prominent bridges that
+  suggest scale; the rest is background.
+
+### A02 rendering + reveal (`components/SectorA02Field.tsx`)
+Renders the A02 grid with the SAME node/cube/link visual language (soft core + additive hollow
+edge-frame + faded links), batched (3 draw calls). On mount it plays a ~4.6s **progressive reveal**
+(nodes bloom centre-outward → routes draw in → settle, then a cheap global breath keeps it alive).
+The explorer swaps the A01 interactive layers for this field when `currentSector==='A02'` (A01
+picking/panels disabled — A02 is free-scan; `handleSelect` ignores A02 picks so no phantom focus).
+
+### A02 visual identity (`nevaMaterials.ts` atmosphere)
+Lighter fog than late-A01 (a 5× world must read across distance) but darker + glowier with a heavier
+vignette + fuller distant dust — vast, advanced, more dangerous, monochrome AR (no neon). HUD reads
+**SECTOR A02 // DEEP GRID**; the mission panel shows **AWAITING NEXT OBJECTIVE** (`getMissionHudState`
+A02 branch).
+
+### Save / dev
+- Persisted: `currentSector`, `a02Unlocked`, `a02Entered`, `a02Seed`, completed sectors + all player
+  progress. **Refresh after entering A02 resumes in A02** (the grid regenerates from `a02Seed`).
+  Soft **R** stays in A02; **Shift+R** full-reset returns to the start (profile identity preserved,
+  separate slot).
+- **Dev:** V (Dev Scan) shows the sector + A02 seed / node / lobe counts; NEVA Terminal `enter a02`
+  (also `go sector a02` / `sector a02` / `a02`) plays the transition for testing.
+
+### NOT in this task (future)
+A02 missions / objectives / node interaction (the `special` anchors are the seam). No token/Web3/
+presale. A03 stays a visual placeholder only (§38).
+
+Files: `src/sectorGen.ts` (new), `components/SectorA02Field.tsx` (new), `components/SectorTransition.tsx`
++ `sectorTransition.css` (new), `game.ts` (sector state + `ENTER_SECTOR_A02` + M20 unlock), `save.ts`
+(merge), `components/InteractiveNetworkExplorer.tsx` (A01↔A02 swap), `components/ExplorerHud.tsx`
+(sector label), `missions.ts` (A02 HUD), `terminal.ts` + `GameApp.tsx` (transition wiring + dev),
+`styles.css` (`.sector-dev`). Build/lint/typecheck pass; Mission 00–20 gameplay/save unchanged.
+
+---
+
+## 40. A01 decoy-density nodes + sector coordinate registry
+
+**A01 is now a dense field of mostly DECOY traps around the real mission nodes** — without touching
+the mission graph. `network.ts` splits the interactive set into **`MISSION_NODE_COUNT = 220`** (the
+original graph — **byte-identical**: same seed/RNG order → same positions, types, edges, and
+designated CORE/HOME/VAULT/… anchors, so missions + existing saves are untouched) and
+**`DECOY_NODE_COUNT = 1980`** appended FIELD nodes (`INTERACTIVE_COUNT = 2200`) — a deterministic
+mix: **~60% real EXTRACTABLE data nodes (MEMORY/MESSAGE/IDENTITY/ARCHIVE → DATA + resource yields)
+and ~40% DECOY hidden traps** (`APPENDED_TYPES` in `game.ts`, own RNG stream).
+
+- **Behaviour (existing mechanics, reused):** every appended node renders as a normal active cube and
+  opens its inspection panel on select. EXTRACTING a **yield** node earns DATA/keys/shards (scaled by
+  depth); extracting a **DECOY** trips it → muted-red + a TRACE spike. They carry **no edges**, are
+  **never** chosen as a designated/tutorial node, and aren't required by any mission. They fill A01's
+  space (≈40% uniform through the sphere, the rest clustered around the lobes) so A01 reads dense and
+  is worth scanning — a treasure-vs-trap field. (Extracting field yield nodes feeds the generic
+  `extracted` data counters, so data-gated missions get a touch easier; mission-specific anchors —
+  VAULT/FRAGMENT/etc. — are still the original <220 indices and unaffected.)
+- **Focus declutter (selected-node readability):** when a node is FOCUSED, the surrounding interactive
+  nodes recede hard (brightness ×0.12) and the background dust dims (×0.2), and a soft **DepthOfField**
+  (`worldFocusDistance ≈ 19`, the focus standoff; `bokehScale 0→3` only while focused, A01 only) gives
+  the surrounding field a little blur — so the selected node + its panel read clearly against the dense
+  grid. No blur / no DoF cost effect when not focused or in A02.
+- **Why missions/saves are safe:** decoys are **appended after index 219**, so every mission anchor,
+  the tutorial path, the type tables, and save `statuses` (keyed by index) are unchanged. All
+  designated/tutorial/type loops in `game.ts` are pinned to `MISSION_NODE_COUNT`; only the render/pick
+  layers iterate the full `INTERACTIVE_COUNT` (so decoys show + are clickable). Edges/corruption span
+  mission nodes only.
+- **Sector coordinate registry** (`src/sectors.ts`): each sector's node coordinates in one file —
+  `SECTORS.A01` (mission + decoy, `NETWORK`) and `SECTORS.A02` (`SECTOR_A02`), each with seed / node
+  count / mission vs decoy split / edges, plus `sectorNodePos(sector, i)` and `exportSectorCoords()`.
+  Coordinates are deterministic from the seed (reproducible), so this is the canonical, saved
+  per-sector coordinate set. Dev Scan (V) now shows A01's mission/decoy counts from it.
+
+Files: `network.ts` (mission/decoy split + append), `game.ts` (`nodeType` decoy + pinned mission
+loops), `src/sectors.ts` (new registry), `GameApp.tsx` (dev readout). Build/lint/typecheck pass;
+Mission 00–20 gameplay/anchors/saves unchanged.

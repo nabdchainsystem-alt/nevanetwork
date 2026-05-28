@@ -10,6 +10,7 @@ export interface UiSettings {
   panelOpacity: PanelOpacity;
   backgroundNoise: BackgroundNoise;
   hudDensity: HudDensity;
+  showLinks: boolean; // network connection lines / routes — fully shown or fully hidden (nodes always render)
 }
 
 const KEY = 'neva:ui-settings:v1';
@@ -23,19 +24,21 @@ export const HUD_DENSITY_VALUES: HudDensity[] = ['Compact', 'Normal', 'Readable'
 export function defaultUiSettings(width = typeof window !== 'undefined' ? window.innerWidth : 1600): UiSettings {
   if (width <= 1400) {
     return {
-      uiScale: 110,
-      textSize: 'Large',
+      uiScale: 125,
+      textSize: 'XL',
       panelOpacity: 'High',
       backgroundNoise: 'Low',
       hudDensity: 'Readable',
+      showLinks: true,
     };
   }
   return {
-    uiScale: 100,
-    textSize: 'Normal',
-    panelOpacity: 'Medium',
-    backgroundNoise: 'Normal',
-    hudDensity: 'Normal',
+    uiScale: 110,
+    textSize: 'Large',
+    panelOpacity: 'High',
+    backgroundNoise: 'Low',
+    hudDensity: 'Readable',
+    showLinks: true,
   };
 }
 
@@ -70,6 +73,7 @@ export function loadUiSettings(): UiSettings {
         ? parsed.backgroundNoise
         : fallback.backgroundNoise,
       hudDensity: isHudDensity(parsed.hudDensity) ? parsed.hudDensity : fallback.hudDensity,
+      showLinks: typeof parsed.showLinks === 'boolean' ? parsed.showLinks : fallback.showLinks,
     };
   } catch {
     return fallback;
@@ -85,22 +89,22 @@ export function saveUiSettings(settings: UiSettings): void {
 }
 
 const textScale: Record<TextSize, number> = {
-  Small: 0.94,
-  Normal: 1,
+  Small: 0.98,
+  Normal: 1.04,
   Large: 1.12,
-  XL: 1.24,
+  XL: 1.25,
 };
 
 const panelAlpha: Record<PanelOpacity, [number, number]> = {
-  Low: [0.62, 0.76],
-  Medium: [0.78, 0.88],
-  High: [0.9, 0.96],
+  Low: [0.82, 0.9],
+  Medium: [0.92, 0.97],
+  High: [0.96, 0.99],
 };
 
 const noiseAlpha: Record<BackgroundNoise, [number, number]> = {
-  Low: [0.012, 0.18],
-  Normal: [0.04, 0.5],
-  High: [0.075, 0.72],
+  Low: [0, 0.06],
+  Normal: [0.012, 0.16],
+  High: [0.028, 0.28],
 };
 
 const densityVars: Record<HudDensity, { gap: number; pad: number; line: number }> = {

@@ -9,6 +9,8 @@ export type TerminalEffect =
   | { kind: 'goto'; type: NodeType }
   | { kind: 'scan'; mode: 'on' | 'off' | 'toggle' }
   | { kind: 'finishMission' } // DEV: mark the current mission complete (fast testing)
+  | { kind: 'enterA02' } // DEV: play the A01 → A02 sector transition (testing)
+  | { kind: 'gotoMission'; mission: number } // DEV: jump straight to a mission by number (testing)
   | { kind: 'clear' }
   | { kind: 'close' };
 
@@ -34,6 +36,7 @@ const HELP: string[] = [
   '  go to <type>   route to the nearest node',
   '  scan [on|off]  toggle silver kind markers',
   '  finish mission  complete now (dev test)',
+  '  mission <n>    jump to mission 01–20 (dev test)',
   '  help           show this list',
   '  clear          wipe the log',
   '  close          exit terminal  (or ESC)',
@@ -59,6 +62,15 @@ export function parseCommand(raw: string): TerminalResult {
   // DEV: skip the grind — mark the current mission complete so you can advance for testing
   if (cmd === 'finish mission' || cmd === 'finish' || cmd === 'complete mission' || cmd === 'fm')
     return { lines: [], effect: { kind: 'finishMission' } };
+
+  // DEV: play the A01 → A02 sector transition (testing) — checked BEFORE the "go <type>" route parser
+  if (cmd === 'enter a02' || cmd === 'enter sector a02' || cmd === 'go sector a02' || cmd === 'sector a02' || cmd === 'a02')
+    return { lines: [], effect: { kind: 'enterA02' } };
+
+  // DEV: jump to a mission by number — "mission 14" / "go to mission 14" / "goto mission 14" / "m 14".
+  // Checked BEFORE the "go to <type>" route parser so "go to mission 14" isn't read as a node type.
+  const mm = cmd.match(/^(?:go to mission|goto mission|mission|m) (\d{1,2})$/);
+  if (mm) return { lines: [], effect: { kind: 'gotoMission', mission: Number(mm[1]) } };
 
   // route commands: "go to <type>" / "goto <type>" / "go <type>" / "nearest <type>"
   let rest: string | null = null;

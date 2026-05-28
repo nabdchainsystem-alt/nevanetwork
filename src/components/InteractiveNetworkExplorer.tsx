@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import FlyCamera from './FlyCamera';
@@ -13,14 +13,45 @@ import InteractiveNodes from './InteractiveNodes';
 import NodeHitProxies from './NodeHitProxies';
 import SelectedNodeFocus from './SelectedNodeFocus';
 import ObjectiveMarker from './ObjectiveMarker';
+import ObjectiveRouteLinks from './ObjectiveRouteLinks';
+import SectorA02Field from './SectorA02Field';
 import NodePanelHost from './NodePanelHost';
 import Subnetwork from './Subnetwork';
 import PlayerSubnetwork from './PlayerSubnetwork';
 import DevScanOverlay from './DevScanOverlay';
+import ActionEffects from './ActionEffects';
 import { SPAWN } from '../world';
 import { nodeType, CORE_NODE_INDEX, type GameState, type GameAction } from '../game';
+import { getPreset, resolveAtmosphere, FOG_INITIAL } from '../visual/nevaMaterials';
+import { SECTOR_A02 } from '../sectorGen';
 import type { ObjectiveVisualKind } from '../objectives';
+
+// A02 establishing-shot framing — derived once from the generated grid's bounding radius so the
+// camera starts FAR enough back to see the whole larger network (not inside the empty inner region).
+const A02_OVERVIEW_RADIUS = SECTOR_A02.bounds.radius * 1.5;
+const A02_OVERVIEW_HEIGHT = SECTOR_A02.bounds.radius * 0.2;
+// background star-dust spread for A02 — scales the A01 dust field up to surround the larger world
+// (A01 dust halo ≈ FIELD.radius·1.25 ≈ 162; ×3 ≈ 486 ≈ the A02 overview radius).
+const A02_DUST_SPREAD = 3;
+
+/**
+ * Eases the scene's exp² fog density toward the live sector/depth target (Visual Upgrade Pass v6),
+ * so moving deeper / into Sector A02 fades the atmosphere in smoothly instead of snapping. Mutates
+ * the existing fog object (created once with a stable initial density) — no allocation per frame.
+ */
+function SectorAtmosphere({ fog }: { fog: number }) {
+  const { scene } = useThree();
+  useFrame((_, delta) => {
+    const f = scene.fog as THREE.FogExp2 | null;
+    if (f && (f as THREE.FogExp2).isFogExp2) {
+      // eslint-disable-next-line react-hooks/immutability -- intentional per-frame ease of the three.js scene fog (standard R3F idiom; no setter to call)
+      f.density += (fog - f.density) * (1 - Math.exp(-1.4 * Math.min(delta, 0.05)));
+    }
+  });
+  return null;
+}
 import type { BackgroundNoise } from '../uiSettings';
+import type { FxEvent } from '../actionFx';
 
 interface Props {
   selected: number | null;
@@ -37,6 +68,9 @@ interface Props {
   devScan: boolean;
   scanOn: boolean; // `scan` terminal command — silver kind markers on nearby nodes
   backgroundNoise: BackgroundNoise;
+  actionFx: FxEvent[]; // transient cinematic action effects (Visual Upgrade Pass v2)
+  enhanced: boolean; // VISUAL MODE (K): ENHANCED premium look vs CLASSIC flat baseline
+  showLinks: boolean; // settings toggle — fully show or fully hide all connection lines / routes
 }
 
 /**
@@ -59,14 +93,21 @@ export default function InteractiveNetworkExplorer({
   devScan,
   scanOn,
   backgroundNoise,
+  actionFx,
+  enhanced,
+  showLinks,
 }: Props) {
-  // Phase 4 — sector atmosphere. Sector A02 (Deep Network, missions 08+) reads deeper: heavier
-  // exp² fog (more distant nodes fade into the void) + a touch more bloom (subtle cyan intensity).
-  // A01 (Memory Grid) stays the calmer, cleaner baseline. Two cheap constants — no per-frame cost.
-  const deepSector = game.missionId >= 8;
-  const fogDensity = deepSector ? 0.0039 : 0.0028;
-  const bloomIntensity = deepSector ? 0.9 : 0.7;
-  const bloomThreshold = deepSector ? 0.18 : 0.2;
+  // Visual Upgrade Pass v6 — SECTOR / DEPTH atmosphere. The look now scales by BOTH the sector
+  // (A01 Memory Grid = clean/readable → A02 Deep Network = deeper/heavier fog + more bloom) AND the
+  // current depth (deeper = thicker fog, more bloom pressure, thinner far dust). Centralized in
+  // `resolveAtmosphere`; combined with the VISUAL MODE (K) bloom base. Fog eases via SectorAtmosphere.
+  const preset = getPreset(enhanced);
+  // Sector A02 = the new procedural grid (free-scan). When entered, swap the A01 interactive layers
+  // for the A02 field; A01 gameplay/rendering is otherwise completely untouched.
+  const inA02 = game.sectorProgress.currentSector === 'A02';
+  const atmo = resolveAtmosphere(inA02 ? 'A02' : 'A01', game.missionId, game.currentDepth, preset);
+  const bloomIntensity = atmo.bloomIntensity;
+  const bloomThreshold = atmo.bloomThreshold;
   const interactiveRef = useRef<THREE.InstancedMesh>(null);
   const hitRef = useRef<THREE.InstancedMesh>(null);
   const gridRef = useRef<THREE.Group>(null);
@@ -91,7 +132,9 @@ export default function InteractiveNetworkExplorer({
       camera={{ fov: 70, near: 0.1, far: 1600, position: SPAWN }}
     >
       <color attach="background" args={['#000000']} />
-      <fogExp2 attach="fog" args={['#000000', fogDensity]} />
+      {/* fog created once at a stable density; SectorAtmosphere eases it toward the live target */}
+      <fogExp2 attach="fog" args={['#000000', FOG_INITIAL]} />
+      <SectorAtmosphere fog={atmo.fogDensity} />
 
       <FlyCamera
         selected={selected}
@@ -105,33 +148,52 @@ export default function InteractiveNetworkExplorer({
         depth={game.currentDepth}
         onFocusReadyChange={handleFocusReadyChange}
         guideNode={guideNode}
+        enhanced={enhanced}
+        overviewRadius={inA02 ? A02_OVERVIEW_RADIUS : undefined}
+        overviewHeight={inA02 ? A02_OVERVIEW_HEIGHT : undefined}
+        flightSpeedScale={inA02 ? 1.3 : 1}
       />
 
       {/* the whole network lives in one group that slowly counter-rotates while
           the camera orbits (idle space drift); frozen during focus/flight */}
       <group ref={gridRef}>
-        <InstancedBackgroundNodes focused={focused} backgroundNoise={backgroundNoise} />
-        {/* full edge mesh once revealed; during the intro a small light path stands in for it */}
+        <InstancedBackgroundNodes focused={focused} backgroundNoise={backgroundNoise} atmoOpacity={atmo.particleOpacity} spread={inA02 ? A02_DUST_SPREAD : 1} />
+
+        {/* SECTOR A02 — the new, larger procedural grid (free-scan). Mounts + plays its progressive
+            reveal only once the player has entered A02. A01 layers below are hidden while in A02. */}
+        {inA02 && <SectorA02Field enhanced={enhanced} devScan={devScan} showLinks={showLinks} />}
+
+        {/* ───────── SECTOR A01 interactive layers (Missions 00–20) — hidden while in A02 ───────── */}
+        {!inA02 && (<>
+        {/* full edge mesh once revealed; during the intro a small light path stands in for it.
+            The settings "NETWORK LINES: HIDDEN" toggle removes the resting connection lines (the
+            guided TutorialPath stays so onboarding isn't broken). */}
         {introStep == null ? (
-          <NodeConnections
-            focused={focused}
-            statuses={game.statuses}
-            depth={game.currentDepth}
-            signalWar={game.missionId >= 3}
-            linkStabilized={game.linkStabilized}
-            pulse={game.pulseActive}
-          />
+          showLinks && (
+            <NodeConnections
+              focused={focused}
+              statuses={game.statuses}
+              depth={game.currentDepth}
+              signalWar={game.missionId >= 3}
+              linkStabilized={game.linkStabilized}
+              pulse={game.pulseActive}
+              enhanced={enhanced}
+              devScan={devScan}
+            />
+          )
         ) : (
           <TutorialPath step={introStep} />
         )}
         {/* Mission 03: readable dashed/flicker overlay on the unstabilized corrupted links */}
-        <CorruptedLinks
-          signalWar={game.missionId >= 3}
-          linkStabilized={game.linkStabilized}
-          pulse={game.pulseActive}
-          focused={focused}
-          devScan={devScan}
-        />
+        {showLinks && (
+          <CorruptedLinks
+            signalWar={game.missionId >= 3}
+            linkStabilized={game.linkStabilized}
+            pulse={game.pulseActive}
+            focused={focused}
+            devScan={devScan}
+          />
+        )}
         {/* Mission 03: subtle camera-facing signal-ring around WATCHER (CAMERA) nodes */}
         <WatcherRings
           signalWar={game.missionId >= 3}
@@ -148,6 +210,9 @@ export default function InteractiveNetworkExplorer({
           statuses={game.statuses}
           depth={game.currentDepth}
           introStep={introStep}
+          coreNode={CORE_NODE_INDEX}
+          homeNode={game.playerSubnetwork.unlocked ? game.playerSubnetwork.homeNodeId : null}
+          enhanced={enhanced}
         />
         <NodeHitProxies hitRef={hitRef} />
         <SelectedNodeFocus
@@ -160,9 +225,15 @@ export default function InteractiveNetworkExplorer({
           isolated={selected != null && !!game.statuses[selected]?.isolated}
           decoy={selected != null && nodeType(selected, game.currentDepth) === 'DECOY'}
           depth={game.currentDepth}
+          enhanced={enhanced}
+          showLinks={showLinks}
         />
         {/* reusable mission-objective guidance — a subtle pulse on the current target node */}
         <ObjectiveMarker node={introStep == null ? objectiveNode ?? null : null} kind={objectiveKind} />
+        {/* a flowing "living route" along the edges leading to that objective node (kind-tinted) */}
+        {showLinks && <ObjectiveRouteLinks node={introStep == null ? objectiveNode ?? null : null} kind={objectiveKind} />}
+        {/* transient cinematic action FX (export/trace/isolate/openStream/dive/core/fail) */}
+        <ActionEffects events={actionFx} />
         <Subnetwork gatewayNode={game.gatewayNode} depthSeed={game.depthSeed} />
         {/* the player's private home grid (HOME node + installed module nodes) */}
         <PlayerSubnetwork sub={game.playerSubnetwork} />
@@ -183,14 +254,15 @@ export default function InteractiveNetworkExplorer({
           onClose={() => onSelect(null)}
           suppressNode={game.playerSubnetwork.homeNodeId}
         />
+        </>)}
       </group>
 
       <EffectComposer>
         <Bloom
           intensity={bloomIntensity}
           luminanceThreshold={bloomThreshold}
-          luminanceSmoothing={0.24}
-          radius={0.6}
+          luminanceSmoothing={0.3}
+          radius={0.55}
           mipmapBlur
         />
       </EffectComposer>

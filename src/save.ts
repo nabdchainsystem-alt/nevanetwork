@@ -1,9 +1,10 @@
 /**
- * Session persistence — a single versioned autosave slot in localStorage so a reload
- * resumes the run (mission, depth, trace, extracted data, node statuses) instead of
- * restarting at Mission 01. JSON-safe state only (the reducer uses plain objects/Records,
- * no Map/Set). Keeps one `.bak` for corruption recovery; tolerates added fields by merging
- * the saved values over a fresh `initGame()`.
+ * Session persistence — versioned autosave slots in localStorage so a reload resumes
+ * the run (mission, depth, trace, extracted data, node statuses) instead of restarting
+ * at Mission 01. Saves can be scoped to a local profile id; the legacy unscoped slot is
+ * still readable for migration/backward compatibility. JSON-safe state only (the reducer
+ * uses plain objects/Records, no Map/Set). Keeps one `.bak` for corruption recovery;
+ * tolerates added fields by merging the saved values over a fresh `initGame()`.
  */
 import { initGame, type GameState } from './game';
 
@@ -15,6 +16,14 @@ const BAK = 'neva:save:v1:bak';
 const CP_KEY = 'neva:checkpoint:v1';
 const CP_BAK = 'neva:checkpoint:v1:bak';
 const VERSION = 1;
+
+const slotPart = (profileId?: string | null) =>
+  profileId ? profileId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
+
+const keyFor = (base: string, profileId?: string | null) => {
+  const slot = slotPart(profileId);
+  return slot ? `${base}:${slot}` : base;
+};
 
 interface SaveBlob {
   version: number;
@@ -62,10 +71,12 @@ function parse(raw: string | null): SaveBlob | null {
 }
 
 /** Read the autosave (falling back to the `.bak`), or null if none/corrupt. */
-export function loadSave(): LoadedSave | null {
+export function loadSave(profileId?: string | null): LoadedSave | null {
   let blob: SaveBlob | null;
   try {
-    blob = parse(localStorage.getItem(KEY)) ?? parse(localStorage.getItem(BAK));
+    blob =
+      parse(localStorage.getItem(keyFor(KEY, profileId))) ??
+      parse(localStorage.getItem(keyFor(BAK, profileId)));
   } catch {
     return null;
   }
@@ -89,6 +100,9 @@ export function loadSave(): LoadedSave | null {
       ...(blob.game.playerSubnetwork ?? {}),
       modules: { ...base.playerSubnetwork.modules, ...(blob.game.playerSubnetwork?.modules ?? {}) },
     },
+    // Sector progression — additive; old saves (no field) default to A01/not-entered. Persisting it
+    // means a refresh after entering A02 RESUMES in A02 (the A02 grid regenerates from a02Seed).
+    sectorProgress: { ...base.sectorProgress, ...(blob.game.sectorProgress ?? {}) },
     mission00: hadIntro
       ? { ...base.mission00, ...blob.game.mission00 }
       : { complete: true, step: 99 }, // pre-intro save = existing player → skip onboarding
@@ -111,23 +125,25 @@ export function loadSave(): LoadedSave | null {
 }
 
 /** Write the autosave (validates round-trip, keeps one `.bak`). Safe to call often. */
-export function writeSave(game: GameState, continued: boolean): void {
+export function writeSave(game: GameState, continued: boolean, profileId?: string | null): void {
   try {
     const json = JSON.stringify({ version: VERSION, continued, game } as SaveBlob);
     JSON.parse(json); // round-trip validation before touching the live slot
-    const existing = localStorage.getItem(KEY);
-    if (existing) localStorage.setItem(BAK, existing);
-    localStorage.setItem(KEY, json);
+    const key = keyFor(KEY, profileId);
+    const bak = keyFor(BAK, profileId);
+    const existing = localStorage.getItem(key);
+    if (existing) localStorage.setItem(bak, existing);
+    localStorage.setItem(key, json);
   } catch {
     /* quota exceeded / storage disabled / serialization issue — skip this autosave */
   }
 }
 
 /** Remove the autosave entirely (not currently wired — a full RESET just overwrites it). */
-export function clearSave(): void {
+export function clearSave(profileId?: string | null): void {
   try {
-    localStorage.removeItem(KEY);
-    localStorage.removeItem(BAK);
+    localStorage.removeItem(keyFor(KEY, profileId));
+    localStorage.removeItem(keyFor(BAK, profileId));
   } catch {
     /* ignore */
   }
@@ -136,12 +152,12 @@ export function clearSave(): void {
 // ----------------------------------------------------- checkpoint slot ---
 
 /** Read the latest checkpoint snapshot (falling back to its `.bak`), or null if none/corrupt. */
-export function loadCheckpoint(): GameState | null {
+export function loadCheckpoint(profileId?: string | null): GameState | null {
   let raw: string | null;
   let bak: string | null;
   try {
-    raw = localStorage.getItem(CP_KEY);
-    bak = localStorage.getItem(CP_BAK);
+    raw = localStorage.getItem(keyFor(CP_KEY, profileId));
+    bak = localStorage.getItem(keyFor(CP_BAK, profileId));
   } catch {
     return null;
   }
@@ -163,24 +179,26 @@ export function loadCheckpoint(): GameState | null {
 
 /** Write a checkpoint snapshot (validates round-trip, keeps one `.bak`). Caller guarantees the
  * state is a SAFE milestone (not locked); we also defensively refuse a locked snapshot. */
-export function writeCheckpoint(game: GameState): void {
+export function writeCheckpoint(game: GameState, profileId?: string | null): void {
   if (game.locked) return; // never overwrite the recoverable checkpoint with a failed state
   try {
     const json = JSON.stringify({ version: VERSION, game } as CheckpointBlob);
     JSON.parse(json); // round-trip validation before touching the live slot
-    const existing = localStorage.getItem(CP_KEY);
-    if (existing) localStorage.setItem(CP_BAK, existing);
-    localStorage.setItem(CP_KEY, json);
+    const key = keyFor(CP_KEY, profileId);
+    const bak = keyFor(CP_BAK, profileId);
+    const existing = localStorage.getItem(key);
+    if (existing) localStorage.setItem(bak, existing);
+    localStorage.setItem(key, json);
   } catch {
     /* quota / storage disabled — skip */
   }
 }
 
 /** Remove the checkpoint slot (used on a full session reset). */
-export function clearCheckpoint(): void {
+export function clearCheckpoint(profileId?: string | null): void {
   try {
-    localStorage.removeItem(CP_KEY);
-    localStorage.removeItem(CP_BAK);
+    localStorage.removeItem(keyFor(CP_KEY, profileId));
+    localStorage.removeItem(keyFor(CP_BAK, profileId));
   } catch {
     /* ignore */
   }

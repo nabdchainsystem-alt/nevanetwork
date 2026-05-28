@@ -130,8 +130,8 @@ export const MISSION_META: Record<number, MissionMeta> = {
     name: 'ARCHIVE HUNT',
     title: 'MISSION 02 // ARCHIVE HUNT',
     sub: ['DEPTH 02 ACTIVE'],
-    obj: ['TRACE ARCHIVE ROUTES', 'EXTRACT HIGHER VALUE DATA', 'AVOID DECOY SIGNALS', 'LOCATE NEXT GATEWAY'],
-    done: ['MISSION 02 COMPLETE', 'ARCHIVE ROUTES EXTRACTED', 'DEPTH 03 SIGNAL DETECTED'],
+    obj: ['TRACE ARCHIVE ROUTES', 'EXTRACT HIGHER VALUE DATA', 'AVOID DECOY SIGNALS', 'ENTER NEXT GATEWAY → DEPTH 03'],
+    done: ['MISSION 02 COMPLETE', 'ARCHIVE ROUTES EXTRACTED', 'DEPTH 03 SUBNETWORK BREACHED'],
   },
   3: {
     name: 'SIGNAL WAR',
@@ -298,6 +298,23 @@ export interface MissionHudState {
  * ExplorerHud (identical strings + conditions) so the displayed objective/checks never change.
  */
 export function getMissionHudState(s: GameState, selected: number | null): MissionHudState {
+  // Sector A02 — the new grid is free-scan; no missions yet. Show a calm "awaiting objective" panel
+  // instead of the Mission-20 content (future missions will replace this).
+  if (s.sectorProgress.currentSector === 'A02') {
+    return {
+      name: 'DEEP GRID',
+      chapter: 'SECTOR A02 // DEEP GRID',
+      title: 'SECTOR A02 // DEEP GRID',
+      subtitle: ['SPATIAL FIELD ONLINE'],
+      objective: 'AWAITING NEXT OBJECTIVE',
+      tasks: [
+        { label: 'SECTOR A02 ONLINE', done: true },
+        { label: 'DEEP GRID STABILIZING', done: true },
+        { label: 'FREE SCAN THE NETWORK', done: true },
+      ],
+      isComplete: false,
+    };
+  }
   const mid = s.missionId;
   const m2 = mid === 2;
   const m3 = mid >= 3;
@@ -364,7 +381,8 @@ export function getMissionHudState(s: GameState, selected: number | null): Missi
     else if (selType === 'CAMERA') objective = 'ISOLATE HIGH TRACE SOURCE';
     else if (p.traced < 6) objective = 'TRACE ARCHIVE ROUTES';
     else if (p.extracted < 200) objective = 'EXTRACT HIGHER VALUE DATA';
-    else if (!s.nextGatewayFound) objective = 'LOCATE NEXT GATEWAY';
+    else if (s.currentDepth < 3)
+      objective = s.nextGatewayFound ? 'ENTER SUBNETWORK → DEPTH 03' : 'LOCATE NEXT GATEWAY';
     else objective = 'CONTINUE EXTRACTION';
   } else {
     // MISSION 01 // SURFACE BREACH
@@ -489,7 +507,7 @@ export function getMissionHudState(s: GameState, selected: number | null): Missi
           { label: 'TRACE LINKS', done: p.traced >= 6, now: p.traced, goal: 6 },
           { label: 'EXPORT ARCHIVES', done: p.archiveExports >= 2, now: p.archiveExports, goal: 2 },
           { label: 'ISOLATE RISK NODES', done: p.riskIsolated >= 2, now: p.riskIsolated, goal: 2 },
-          { label: 'LOCATE GATEWAY → DEPTH 03', done: s.nextGatewayFound },
+          { label: 'ENTER SUBNETWORK → DEPTH 03', done: s.currentDepth >= 3 },
           { label: 'AVOID DECOY EXPORTS', done: p.decoyExports === 0, warn: p.decoyExports > 0 },
         ]
       : [

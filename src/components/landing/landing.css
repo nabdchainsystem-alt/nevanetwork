@@ -18,9 +18,11 @@
   scroll-padding-top: 78px;
   background: #02040a;
   color: #fff;
-  font-family: var(--wg-mono);
+  font-family: var(--wg-ui);
   cursor: default;
-  -webkit-font-smoothing: antialiased;
+  font-weight: 500;
+  -webkit-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
 }
 @media (prefers-reduced-motion: reduce) { .lp { scroll-behavior: auto; } }
 
@@ -116,7 +118,7 @@
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(214, 230, 255, 0.72);
+  color: rgba(228, 238, 255, 0.9);
   text-decoration: none;
   padding: 4px 2px;
   border-bottom: 1px solid transparent;
@@ -132,7 +134,8 @@
   align-items: center;
   justify-content: center;
   appearance: none;
-  font-family: var(--wg-mono);
+  font-family: var(--wg-ui);
+  font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -533,6 +536,33 @@
 .lp-footer__disc { display: grid; gap: 8px; padding: 18px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .lp-footer__disc p { margin: 0; font-size: 11px; line-height: 1.65; color: rgba(168, 186, 210, 0.6); max-width: 820px; }
 .lp-footer__base { margin-top: 10px; font-size: 10px; letter-spacing: 0.08em; color: rgba(150, 172, 198, 0.42); }
+
+/* Readability override for the public page. */
+.lp :is(p, li, label, input, button, a, span) {
+  text-shadow: var(--readable-text-shadow);
+}
+
+.lp :is(.lp-lead, .lp-card p, .lp-list li, .lp-sector__d, .lp-phase__items li, .lp-alpha__note p, .lp-coin__safe p, .lp-ea__lead, .lp-footer__disc p) {
+  color: rgba(228, 238, 255, 0.9);
+}
+
+.lp :is(.lp-kicker, .lp-card__k, .lp-sector__id, .lp-phase__id, .lp-footer__tagline, .lp-form__fine, .lp-footer__base) {
+  color: rgba(202, 222, 245, 0.78);
+}
+
+.lp :is(.lp-hero__title, .lp-h2, .lp-nav__brand) {
+  color: #fff;
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  filter: none;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 1), 0 0 18px rgba(180, 220, 255, 0.34);
+}
+
+.lp :is(.lp-hero__eyebrow, .lp-hero__coord, .lp-hero__sub, .lp-note) {
+  color: rgba(226, 238, 255, 0.86);
+}
 
 /* ---------------------------------------------------------------- responsive --- */
 @media (max-width: 860px) {

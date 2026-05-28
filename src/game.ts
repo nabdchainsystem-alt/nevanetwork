@@ -5,7 +5,8 @@
  * (no Date.now / Math.random) so it is React-StrictMode safe.
  */
 import { WORLD_SEED, mulberry32 } from './world';
-import { NETWORK, INTERACTIVE_COUNT } from './network';
+import { NETWORK, INTERACTIVE_COUNT, MISSION_NODE_COUNT } from './network';
+import { A02_SEED } from './sectorGen';
 
 export type NodeType =
   | 'MEMORY'
@@ -64,7 +65,9 @@ function buildTypes(weights: [NodeType, number][], seed: number): NodeType[] {
   const rng = mulberry32(seed >>> 0);
   const total = weights.reduce((s, [, w]) => s + w, 0);
   const out: NodeType[] = [];
-  for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+  // only the MISSION nodes get a rolled type — appended decoy nodes are forced DECOY in `nodeType`.
+  // (Same per-node RNG draws in order, so the mission types are byte-identical to before.)
+  for (let i = 0; i < MISSION_NODE_COUNT; i++) {
     let r = rng() * total;
     let pick: NodeType = 'MEMORY';
     for (const [t, w] of weights) {
@@ -124,9 +127,30 @@ ensureType(TYPES_DEEP, 'CAMERA', 2, (WORLD_SEED ^ 0x6a3e11 ^ 0x0ca3) >>> 0); // 
 /** Retained export = the depth-01 assignment. */
 export const NODE_TYPES: NodeType[] = TYPES_D1;
 
-/** A node's game-type at a given depth (depth ≥ 2 uses the deeper, riskier mix). */
+// Appended nodes (index ≥ MISSION_NODE_COUNT) that fill A01: ~40% DECOY hidden traps + ~60% real
+// EXTRACTABLE data nodes (MEMORY/MESSAGE/IDENTITY/ARCHIVE) so scanning the dense field earns yields,
+// not just trips traps. Deterministic per index (own RNG stream) → a node is always the same type.
+const APPENDED_TYPES: NodeType[] = (() => {
+  const n = Math.max(0, INTERACTIVE_COUNT - MISSION_NODE_COUNT);
+  const rng = mulberry32((WORLD_SEED ^ 0x0dec0a) >>> 0);
+  const out: NodeType[] = [];
+  for (let i = 0; i < n; i++) {
+    if (rng() < 0.4) {
+      out.push('DECOY'); // ~40% hidden traps
+    } else {
+      const r = rng(); // ~60% extractable DATA nodes (yield on EXPORT)
+      out.push(r < 0.42 ? 'MEMORY' : r < 0.72 ? 'MESSAGE' : r < 0.9 ? 'IDENTITY' : 'ARCHIVE');
+    }
+  }
+  return out;
+})();
+
+/** A node's game-type at a given depth (depth ≥ 2 uses the deeper, riskier mix). Appended nodes
+ * (index ≥ MISSION_NODE_COUNT) use the fixed APPENDED_TYPES mix (mostly extractable, some DECOY). */
 export const nodeType = (i: number, depth = 1): NodeType =>
-  (depth >= 2 ? TYPES_DEEP : TYPES_D1)[i] ?? 'MEMORY';
+  i >= MISSION_NODE_COUNT
+    ? APPENDED_TYPES[i - MISSION_NODE_COUNT] ?? 'DECOY'
+    : (depth >= 2 ? TYPES_DEEP : TYPES_D1)[i] ?? 'MEMORY';
 
 // Precomputed GATEWAY index lists per layer (for the dev gateway locator / G shortcut).
 const GATEWAYS_D1 = TYPES_D1.flatMap((t, i) => (t === 'GATEWAY' ? [i] : []));
@@ -146,7 +170,7 @@ export const watchersAtDepth = (depth: number): number[] =>
  * cycling so repeated commands visit different nodes (deterministic index order). */
 export const nodesOfType = (type: NodeType, depth: number): number[] => {
   const out: number[] = [];
-  for (let i = 0; i < INTERACTIVE_COUNT; i++) if (nodeType(i, depth) === type) out.push(i);
+  for (let i = 0; i < MISSION_NODE_COUNT; i++) if (nodeType(i, depth) === type) out.push(i);
   return out;
 };
 
@@ -441,7 +465,7 @@ export const STORAGE_BASE = 500; // private-grid base storage; DATA VAULT raises
 export const HOME_NODE_INDEX: number = (() => {
   let best = 0;
   let bestD = Infinity;
-  for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+  for (let i = 0; i < MISSION_NODE_COUNT; i++) {
     const x = NETWORK.positions[i * 3];
     const y = NETWORK.positions[i * 3 + 1];
     const z = NETWORK.positions[i * 3 + 2];
@@ -456,7 +480,7 @@ export const HOME_NODE_INDEX: number = (() => {
 export const CORE_NODE_INDEX: number = (() => {
   let best = 0;
   let bestD = -1;
-  for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+  for (let i = 0; i < MISSION_NODE_COUNT; i++) {
     const x = NETWORK.positions[i * 3];
     const y = NETWORK.positions[i * 3 + 1];
     const z = NETWORK.positions[i * 3 + 2];
@@ -474,7 +498,7 @@ export const CORE_NODE_INDEX: number = (() => {
 const farthestOfType = (deepType: NodeType, exclude: ReadonlySet<number>): number => {
   let best = -1;
   let bestD = -1;
-  for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+  for (let i = 0; i < MISSION_NODE_COUNT; i++) {
     if (exclude.has(i) || nodeType(i, 2) !== deepType) continue;
     const x = NETWORK.positions[i * 3];
     const y = NETWORK.positions[i * 3 + 1];
@@ -642,14 +666,14 @@ export const TUTORIAL_NODES: number[] = (() => {
   for (const step of TUTORIAL_STEPS) {
     if (step.want === 'CORE') { out.push(CORE_NODE_INDEX); prev = CORE_NODE_INDEX; continue; }
     let pick = -1, best = Infinity;
-    for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+    for (let i = 0; i < MISSION_NODE_COUNT; i++) {
       if (used.has(i) || nodeType(i, 1) !== step.want) continue;
       const d = prev < 0 ? fromOrigin(i) : d2(prev, i);
       if (d < best) { best = d; pick = i; }
     }
     if (pick < 0) {
       // type absent (shouldn't happen at depth 1 — every type has weight): nearest unused node
-      for (let i = 0; i < INTERACTIVE_COUNT; i++) {
+      for (let i = 0; i < MISSION_NODE_COUNT; i++) {
         if (used.has(i)) continue;
         const d = prev < 0 ? fromOrigin(i) : d2(prev, i);
         if (d < best) { best = d; pick = i; }
@@ -842,6 +866,8 @@ export interface GameState {
   // --- Mission 00 // FIRST SIGNAL (guided onboarding intro; gates the network reveal) ---
   networkRevealed: boolean; // false during the intro — only the revealed tutorial nodes show
   mission00: Mission00State;
+  // --- Sector progression (A01 = Missions 00–20; A02 = the new procedural grid, post-M20) ---
+  sectorProgress: SectorProgress;
 }
 
 /** Mission 00 — the guided onboarding intro. `complete` ends it; `step` is the current beat
@@ -849,6 +875,20 @@ export interface GameState {
 export interface Mission00State {
   complete: boolean;
   step: number;
+}
+
+/**
+ * Sector progression. Missions 00–20 ARE Sector A01 (the existing game, gameplay unchanged).
+ * Completing Mission 20 secures A01 and UNLOCKS the route to Sector A02 — a new, larger procedural
+ * grid (free-scan; future missions). `a02Entered` flips after the A01→A02 cinematic transition.
+ * Additive + save-merged, so old saves default to A01 (not entered).
+ */
+export interface SectorProgress {
+  currentSector: 'A01' | 'A02';
+  completedSectors: string[]; // e.g. ['A01'] once Mission 20 is done
+  a02Unlocked: boolean; // Mission 20 complete → route open
+  a02Entered: boolean; // player has crossed into Sector A02
+  a02Seed: number; // deterministic seed of the generated A02 grid (0 until assigned)
 }
 
 /** The player's private home grid — a second progression layer (see MODULE_DEFS). */
@@ -904,9 +944,12 @@ export type GameAction =
   | { type: 'INSPECT'; node: number }
   | { type: 'MISSION_START' }
   | { type: 'MISSION_ADVANCE' } // current mission complete → begin the next (keep network state)
+  | { type: 'ENTER_SECTOR_A02' } // cross into Sector A02 (the new grid) after the A01→A02 transition
   | { type: 'FORCE_COMPLETE' } // DEV: "finish mission" terminal command — latch complete for fast testing
+  | { type: 'GOTO_MISSION'; mission: number } // DEV: "mission N" terminal command — jump to a mission (1..20)
   | { type: 'PULSE_START' } // a signal pulse begins (Mission 03 network resistance)
   | { type: 'PULSE_END' } // the pulse ends (survived +1)
+  | { type: 'LOAD_GAME'; game: GameState } // switch to another local profile's saved run
   | { type: 'LOAD_CHECKPOINT'; checkpoint: GameState | null } // recover from a trace lock
   | { type: 'RESET' };
 
@@ -993,6 +1036,13 @@ export function initGame(): GameState {
     },
     networkRevealed: false,
     mission00: { complete: false, step: 0 },
+    sectorProgress: {
+      currentSector: 'A01',
+      completedSectors: [],
+      a02Unlocked: false,
+      a02Entered: false,
+      a02Seed: 0,
+    },
   };
 }
 
@@ -1154,12 +1204,18 @@ export function missionTasksDone(s: GameState): boolean {
   }
   if (s.missionId >= 2) {
     // MISSION 02 // ARCHIVE HUNT
+    // Descend = final step: latch complete only once you actually ENTER SUBNETWORK to Depth 03
+    // (currentDepth only rises via ENTER_SUB), NOT merely when the gateway stream is OPENED. Gating
+    // on `nextGatewayFound` (set on OPEN STREAM) completed the mission the instant you opened the
+    // gateway, before the player could enter — confusing next to the ENTER SUBNETWORK button.
+    // Same pattern as Mission 08 (gated on currentDepth ≥ 4, not on the detect flag). Locating the
+    // gateway is implicit: ENTER_SUB requires its stream to be open first.
     return (
       p.extracted >= 200 &&
       p.traced >= 6 &&
       p.archiveExports >= 2 &&
       p.riskIsolated >= 2 &&
-      s.nextGatewayFound
+      s.currentDepth >= 3
     );
   }
   // MISSION 01 // SURFACE BREACH
@@ -1235,7 +1291,7 @@ export const traceTier = (trace: number): TraceTier =>
 function applyAction(s: GameState, a: GameAction): GameState {
   // when compromised, freeze everything except a reset / checkpoint recovery (PULSE_END may
   // still clear a pulse that was active at the moment of lock, so the signal cue doesn't stick)
-  if (s.locked && a.type !== 'RESET' && a.type !== 'LOAD_CHECKPOINT' && a.type !== 'PULSE_END')
+  if (s.locked && a.type !== 'RESET' && a.type !== 'LOAD_GAME' && a.type !== 'LOAD_CHECKPOINT' && a.type !== 'PULSE_END')
     return s;
 
   switch (a.type) {
@@ -1667,12 +1723,82 @@ function applyAction(s: GameState, a: GameAction): GameState {
         ? s
         : { ...s, missionStarted: true, missionComplete: true, pulseActive: false };
 
+    case 'GOTO_MISSION': {
+      // DEV / TESTING — the "mission N" terminal command. A REAL transfer: it sets the mission up the
+      // way you'd arrive there in play, not just a label swap. Past the tutorial, network revealed,
+      // lock cleared; the mission's OPERATING DEPTH is set (so the layer/types + depth-gated tasks
+      // match); the target mission's objective FLAG is reset and its designated node's status cleared
+      // (so its objective is FRESH/active, never showing as already-done); and task baselines are
+      // snapshotted so the checklist starts at 0. The briefing then shows → BEGIN warps to the
+      // objective. Pure/deterministic (no clock/RNG); reuses the fixed designated-node indices.
+      const id = Math.max(1, Math.min(20, Math.floor(a.mission)));
+      // canonical operating depth per mission (deep missions need depth ≥ 2 for the right node types)
+      const DEPTHS: Record<number, number> = {
+        1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 3, 8: 3, 9: 3, 10: 3,
+        11: 3, 12: 3, 13: 3, 14: 3, 15: 3, 16: 3, 17: 3, 18: 3, 19: 3, 20: 3,
+      };
+      const depth = DEPTHS[id] ?? 3;
+      // reset the target mission's objective so it's fresh: clear its flag + its designated node state
+      const statuses = { ...s.statuses };
+      const clearNode = (n: number | null | undefined) => { if (n != null) delete statuses[n]; };
+      const flags: Partial<GameState> = {};
+      switch (id) {
+        case 7: clearNode(CORE_NODE_INDEX); break;
+        case 8: flags.deepSignalDetected = false; break;
+        case 9: flags.vaultBreached = false; clearNode(VAULT_NODE_INDEX); break;
+        case 10: flags.blackFirewallOpened = false; clearNode(FIREWALL_NODE_INDEX); break;
+        case 11: flags.corruptionWaveCleared = false; clearNode(CORRUPTION_NODE_INDEX); break;
+        case 12: flags.brokenRelayRestored = false; clearNode(RELAY_NODE_INDEX); break;
+        case 13: flags.signalStormCleared = false; clearNode(STORM_NODE_INDEX); break;
+        case 14: flags.coreFragmentRecovered = false; clearNode(FRAGMENT_NODE_INDEX); break;
+        case 15: flags.privateGridStabilized = false; break;
+        case 16: flags.corruptionContained = false; clearNode(CLUSTER_NODE_INDEX); break;
+        case 17: flags.blackRouteOpened = false; clearNode(BLACKROUTE_NODE_INDEX); break;
+        case 18: flags.coreChamberOpened = false; clearNode(CHAMBER_NODE_INDEX); break;
+        case 19: flags.alphaCoreStabilized = false; clearNode(ALPHA_CORE_NODE_INDEX); break;
+        case 20: flags.sectorA02Secured = false; clearNode(ALPHA_CORE_NODE_INDEX); break;
+      }
+      return {
+        ...s,
+        ...flags,
+        missionId: id,
+        mission00: { complete: true, step: TUTORIAL_STEPS.length },
+        networkRevealed: true,
+        missionStarted: false, // show the target mission's briefing → BEGIN warps to the objective
+        missionComplete: false,
+        pulseActive: false,
+        nextGatewayFound: false,
+        locked: false,
+        // Missions 01–20 live in SECTOR A01 — return to it (A02 stays unlocked; re-enter via `enter a02`).
+        // Without this, jumping while in A02 left the A02 grid/sector/tasks on screen under a stale label.
+        sectorProgress: { ...s.sectorProgress, currentSector: 'A01' },
+        streamNode: null,
+        tracedFrom: null,
+        currentDepth: depth,
+        maxDepthReached: Math.max(s.maxDepthReached, depth),
+        statuses,
+        missionBase: {
+          extracted: s.extractedData,
+          revealed: s.revealedLinks,
+          riskIsolated: s.riskIsolated,
+          archiveExports: s.archiveExports,
+          decoyExports: s.decoyExports,
+          survived: s.signalPulsesSurvived,
+          stabilized: s.corruptedLinksStabilized,
+          watcher: s.watcherIsolated,
+        },
+      };
+    }
+
     case 'PULSE_START':
       return s.pulseActive ? s : { ...s, pulseActive: true };
 
     case 'PULSE_END':
       // surviving a full pulse advances the Mission 03 task
       return { ...s, pulseActive: false, signalPulsesSurvived: s.signalPulsesSurvived + 1 };
+
+    case 'LOAD_GAME':
+      return a.game;
 
     case 'LOAD_CHECKPOINT': {
       // recover from a trace lock: restore the latest milestone snapshot (or, if none exists,
@@ -1689,6 +1815,29 @@ function applyAction(s: GameState, a: GameAction): GameState {
         tracedFrom: null,
         message: null,
         msgNode: null,
+      };
+    }
+
+    case 'ENTER_SECTOR_A02': {
+      // cross into Sector A02 (the new procedural grid). Marks A01 complete + A02 entered and pins
+      // the deterministic A02 seed. Preserves ALL player progress (resources/upgrades/subnetwork/
+      // statuses/mission) — A02 is a new free-scan field layered on the same session, not a wipe.
+      if (s.sectorProgress.currentSector === 'A02') return s;
+      const completed = s.sectorProgress.completedSectors.includes('A01')
+        ? s.sectorProgress.completedSectors
+        : [...s.sectorProgress.completedSectors, 'A01'];
+      return {
+        ...s,
+        streamNode: null,
+        tracedFrom: null,
+        sectorProgress: {
+          ...s.sectorProgress,
+          currentSector: 'A02',
+          a02Unlocked: true,
+          a02Entered: true,
+          a02Seed: s.sectorProgress.a02Seed || A02_SEED,
+          completedSectors: completed,
+        },
       };
     }
 
@@ -1771,6 +1920,22 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
     next = {
       ...next,
       playerSubnetwork: { ...next.playerSubnetwork, unlocked: true, homeNodeId: HOME_NODE_INDEX },
+    };
+  }
+  // Completing Mission 20 SECURES Sector A01 and UNLOCKS the route to Sector A02 (the new grid).
+  // One-time + idempotent; a loaded M20-complete save auto-unlocks on its first tick. Does NOT enter
+  // A02 (that's the player's ENTER SECTOR A02 choice → ENTER_SECTOR_A02). `sectorA02Secured` stays
+  // the internal Mission-20 completion flag — only the player-facing framing is now "A01 complete".
+  if (next.missionId >= 20 && next.missionComplete && next.sectorProgress.currentSector === 'A01' && !next.sectorProgress.a02Unlocked) {
+    next = {
+      ...next,
+      sectorProgress: {
+        ...next.sectorProgress,
+        a02Unlocked: true,
+        completedSectors: next.sectorProgress.completedSectors.includes('A01')
+          ? next.sectorProgress.completedSectors
+          : [...next.sectorProgress.completedSectors, 'A01'],
+      },
     };
   }
   return next;
